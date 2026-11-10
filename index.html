@@ -40,6 +40,10 @@ h1{font-size:clamp(2.6rem,8vw,5.4rem);font-weight:800;line-height:1.05;margin:10
 .stat{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:22px;text-align:center}
 .stat b{display:block;font-size:2.2rem;font-weight:800}
 .stat span{color:var(--mut);font-size:.85rem}
+.stats.wide{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-top:16px}
+.stat.tx{text-align:left;transition:.4s}
+.stat.tx:hover{transform:translateY(-6px);border-color:var(--a);box-shadow:0 12px 35px rgba(76,201,240,.15)}
+.stat.tx b{font-size:1.15rem;margin-bottom:6px}
 .reveal{opacity:0;transform:translateY(40px);transition:1s cubic-bezier(.2,.8,.2,1)}
 .reveal.in{opacity:1;transform:none}
 .about p{color:var(--mut);font-size:1.08rem;max-width:850px}
@@ -91,6 +95,18 @@ footer{text-align:center;padding:30px;color:var(--mut);font-size:.8rem;border-to
 <div class="stat"><b data-n="3" data-s="">0</b><span>Healthcare platforms owned</span></div>
 <div class="stat"><b data-n="100" data-s="+">0</b><span>Systems run for CBT exams</span></div>
 <div class="stat"><b data-n="15" data-s="%">0</b><span>Azure spend cut (12-15%)</span></div>
+<div class="stat"><b data-n="10" data-s="+">0</b><span>OSDC/NIC government projects delivered</span></div>
+<div class="stat"><b data-n="10000" data-s="+">0</b><span>Candidates supported in one exam rollout</span></div>
+<div class="stat"><b data-n="2" data-s="">0</b><span>Clouds run in production: Azure &amp; AWS</span></div>
+<div class="stat"><b data-n="3" data-s="">0</b><span>Orgs: TatvaCare, CareTech, Silicon TechLab</span></div>
+</div>
+<div class="stats wide">
+<div class="stat tx"><b class="grad">AWS Cost Optimization</b><span>Finding overprovisioned resources through usage reviews and capacity planning, then rightsizing and removing what's unused</span></div>
+<div class="stat tx"><b class="grad">FinOps: Azure &amp; AWS</b><span>Tracking and trimming spend on both clouds, with 12-15% off the monthly Azure bill</span></div>
+<div class="stat tx"><b class="grad">Release Management</b><span>Planned Production &amp; UAT go-lives across Node.js, React, PHP and Java apps</span></div>
+<div class="stat tx"><b class="grad">Observability</b><span>Grafana and Prometheus dashboards, CloudWatch, log and performance tracking</span></div>
+<div class="stat tx"><b class="grad">Healthcare IT Ops</b><span>HMIS, EMR (ABDM certified) and digital therapeutics platforms, L2 incident response</span></div>
+<div class="stat tx"><b class="grad">Security &amp; Reliability</b><span>IAM, RBAC, SSL/TLS, hardening, patching and automated backups</span></div>
 </div>
 </section>
 
