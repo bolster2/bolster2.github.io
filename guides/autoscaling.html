@@ -67,7 +67,7 @@ canvas.fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 @media(prefers-reduced-motion:reduce){.pod{animation:none}}
 </style></head><body>
 <div id="prog"></div><canvas id="bg"></canvas>
-<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a><a href="cicd.html">CI/CD</a><a class="on" href="autoscaling.html">Autoscaling</a></div></nav>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a><a href="cicd.html">CI/CD</a><a class="on" href="autoscaling.html">Autoscaling</a><a href="cloud-services.html">Azure vs AWS</a></div></nav>
 <main>
 <div class="tag">GUIDE 08 &middot; INTERACTIVE</div>
 <h1>More Pods, or a <span class="grad">bigger Pod?</span></h1>
@@ -199,7 +199,7 @@ az aks nodepool update -g rg-uat --cluster-name aks-uat -n nodepool1 \
 <tr><td>Cost effect</td><td>Pay for extra pods only during peaks</td><td>Stops over-requesting, so fewer idle resources</td></tr>
 <tr><td>Combine?</td><td colspan="2">Fine when they use different signals, for example HPA on CPU or custom metrics and VPA in recommendation mode for requests. Do not let both act on the same CPU or memory metric.</td></tr></table>
 
-<div class="pager"><a href="cicd.html">&larr; CI/CD</a><a href="../index.html#guides">All guides &rarr;</a></div>
+<div class="pager"><a href="cicd.html">&larr; CI/CD</a><a href="cloud-services.html">Azure vs AWS picker &rarr;</a></div>
 </main><footer>&copy; 2026 Himansu Kumar Behera</footer>
 
 <script src="guide.js"></script>

@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azure vs AWS Service Picker | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css">
+<style>
+:root{--az:#3aa0ff;--aw:#ff9900}
+.wrap{display:grid;gap:16px}
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.search{flex:1;min-width:200px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:11px 14px;color:var(--tx);font:500 .92rem Inter,sans-serif;outline:none}
+.search:focus{border-color:var(--a)}
+.seg{display:flex;background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+.seg button{background:none;border:0;color:var(--mut);padding:10px 16px;font:600 .8rem Inter,sans-serif;cursor:pointer;transition:.2s}
+.seg button.on{background:linear-gradient(90deg,var(--a),var(--b));color:#fff}
+.seg button[data-c=az].on{background:var(--az)}.seg button[data-c=aw].on{background:var(--aw);color:#111}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:rgba(255,255,255,.05);border:1px solid var(--bd);color:var(--tx);border-radius:999px;padding:6px 14px;font:600 .76rem Inter,sans-serif;cursor:pointer;transition:.2s}
+.chip:hover{border-color:var(--a)}.chip.on{background:rgba(76,201,240,.15);border-color:var(--a);color:var(--a)}
+.split{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+.list{background:var(--card);border:1px solid var(--bd);border-radius:16px;max-height:640px;overflow-y:auto;padding:8px}
+.li{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:10px;padding:9px 12px;color:var(--tx);font:600 .86rem Inter,sans-serif;cursor:pointer;transition:.2s}
+.li small{font:500 .62rem 'JetBrains Mono',monospace;color:var(--mut)}
+.li:hover{background:rgba(255,255,255,.05)}
+.li.on{background:rgba(124,92,255,.18);border-color:var(--b)}
+.li .added{color:#2de2a6;font-size:.8rem}
+.empty{padding:20px;color:var(--mut);text-align:center;font-size:.9rem}
+.detail{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:22px}
+.detail h2{margin:0 0 4px;padding:0;font-size:1.5rem}
+.detail h2:before{content:""}
+.dsc{color:var(--mut);margin-bottom:16px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cols.one{grid-template-columns:1fr}
+.col{border:1px solid var(--bd);border-radius:14px;padding:14px}
+.col.az{border-color:rgba(58,160,255,.4)}.col.aw{border-color:rgba(255,153,0,.45)}
+.col h4{font:700 .72rem 'JetBrains Mono',monospace;letter-spacing:.14em;margin-bottom:10px}
+.col.az h4{color:var(--az)}.col.aw h4{color:var(--aw)}
+.opt{display:block;width:100%;text-align:left;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;color:var(--tx);transition:.2s;font-family:Inter,sans-serif}
+.opt:hover{transform:translateY(-2px)}
+.opt b{display:flex;justify-content:space-between;gap:8px;font-size:.92rem}
+.opt b i{font:500 .58rem 'JetBrains Mono',monospace;font-style:normal;color:var(--mut);border:1px solid var(--bd);border-radius:5px;padding:1px 6px;white-space:nowrap;align-self:center}
+.opt>span{display:block;color:var(--mut);font-size:.8rem;margin-top:3px;line-height:1.45}
+.col.az .opt.sel{border-color:var(--az);background:rgba(58,160,255,.12)}
+.col.aw .opt.sel{border-color:var(--aw);background:rgba(255,153,0,.1)}
+.opt.sel b:after{content:"\2713";color:#2de2a6;margin-left:6px}
+.ins{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.ibox{border-radius:12px;padding:12px 14px;font-size:.86rem;border-left:3px solid}
+.ibox b{display:block;font:700 .65rem 'JetBrains Mono',monospace;letter-spacing:.12em;margin-bottom:4px}
+.ibox.p{border-color:var(--b);background:rgba(124,92,255,.08);color:#cbc8ff}.ibox.p b{color:var(--b)}
+.ibox.c{border-color:#2de2a6;background:rgba(45,226,166,.07);color:#c2efe0}.ibox.c b{color:#2de2a6}
+.addbtn{margin-top:16px;background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff;border-radius:999px;padding:11px 24px;font:700 .85rem Inter,sans-serif;cursor:pointer;transition:.25s;box-shadow:0 8px 24px rgba(124,92,255,.3)}
+.addbtn:hover{transform:translateY(-2px)}.addbtn.rm{background:rgba(255,255,255,.07);box-shadow:none;border:1px solid var(--bd)}
+.stack{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:20px;margin-top:8px}
+.stack h3{margin:0 0 4px;color:var(--tx);font-size:1.15rem}
+.stack .hint{color:var(--mut);font-size:.84rem;margin-bottom:12px}
+.stack table{margin:8px 0 12px}
+.stack td button{background:none;border:0;color:#f72585;cursor:pointer;font-size:1rem}
+.st-actions{display:flex;gap:10px;flex-wrap:wrap}
+.sbtn{background:rgba(255,255,255,.06);border:1px solid var(--bd);color:var(--tx);border-radius:10px;padding:8px 16px;font:600 .78rem Inter,sans-serif;cursor:pointer}
+.sbtn:hover{border-color:var(--a);color:var(--a)}
+.azc{color:var(--az);font-weight:600}.awc{color:var(--aw);font-weight:600}
+@media(max-width:860px){.split{grid-template-columns:1fr}.list{max-height:260px}.cols,.ins{grid-template-columns:1fr}}
+</style></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a><a href="cicd.html">CI/CD</a><a href="autoscaling.html">Autoscaling</a><a class="on" href="cloud-services.html">Azure vs AWS</a></div></nav>
+<main>
+<div class="tag">GUIDE 09 &middot; INTERACTIVE</div>
+<h1>Pick the right <span class="grad">Azure or AWS</span> service</h1>
+<p class="sub">Choose a use case and see the matching service on each cloud, when to pick it and a cost tip. Select your preferred option for each, then add it to <b>My stack</b> and copy the list.</p>
+
+<div class="wrap">
+ <div class="bar">
+  <input class="search" id="q" type="search" placeholder="Search a use case or service, e.g. queue, Redis, Lambda, AKS" aria-label="Search">
+  <div class="seg" id="cloud"><button data-c="both" class="on">Both</button><button data-c="az">Azure</button><button data-c="aw">AWS</button></div>
+ </div>
+ <div class="chips" id="cats"></div>
+ <div class="split">
+  <div class="list" id="list"></div>
+  <div class="detail" id="detail"></div>
+ </div>
+ <div class="stack" id="stack"></div>
+</div>
+
+<div class="note" style="margin-top:28px">Service names and features change often, and regional availability and pricing differ. Treat this as a starting map, and confirm details in the official Azure and AWS documentation before you design or buy.</div>
+
+<div class="pager"><a href="autoscaling.html">&larr; HPA vs VPA</a><a href="../index.html#guides">All guides &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+
+<script src="guide.js"></script>
+<script>
+(function(){
+const CATS=["Compute","Containers","Storage","Database","Networking","Security","DevOps","Observability","Data & AI","Cost"];
+/* t = tag shown on option. First option of each cloud is the default pick. */
+const U=[
+{id:"static",cat:"Compute",title:"Static website / SPA hosting",desc:"Host HTML, JS and a built React/Vite/Angular front end with HTTPS and a CDN.",
+ az:[{n:"Azure Static Web Apps",t:"Simplest",d:"Git-integrated deploys, free SSL, global edge, optional Functions API."},{n:"Blob Storage static site + Front Door/CDN",t:"More control",d:"Static website on a storage account, fronted by a CDN or Front Door for custom rules."}],
+ aw:[{n:"S3 + CloudFront",t:"Classic",d:"Static files in S3 served globally through CloudFront with HTTPS."},{n:"AWS Amplify Hosting",t:"Simplest",d:"Git-connected builds and hosting with previews per branch."}],
+ pick:"Choose the git-integrated option (Static Web Apps or Amplify) for speed. Use storage + CDN when you need custom caching, rules or a shared CDN.",cost:"Static hosting is very cheap. The main cost is egress, so use a CDN and set long cache headers."},
+{id:"webapp",cat:"Compute",title:"Web app or API (PaaS, no containers needed)",desc:"Run a Node.js, Java, .NET, PHP or Python app without managing servers.",
+ az:[{n:"Azure App Service",t:"Managed PaaS",d:"Web apps and APIs with deployment slots, autoscale and built-in TLS."}],
+ aw:[{n:"AWS Elastic Beanstalk",t:"Managed PaaS",d:"Upload code, it provisions EC2, load balancer and scaling for you."},{n:"AWS App Runner",t:"Simplest",d:"Run a container or source repo as a web service with autoscaling."}],
+ pick:"App Service is the closest all-round PaaS. On AWS, App Runner is simpler, Beanstalk gives more control over the underlying instances.",cost:"Right-size the plan or instance, and use dev/test tiers for non-production."},
+{id:"containers",cat:"Containers",title:"Run containers without managing Kubernetes",desc:"Deploy Docker images with scaling, ingress and revisions, with no cluster to operate.",
+ az:[{n:"Azure Container Apps",t:"Serverless containers",d:"Scale to zero, KEDA rules, revisions and traffic splitting."},{n:"Azure Container Instances",t:"Single containers",d:"Quick, short-lived containers or simple tasks."}],
+ aw:[{n:"Amazon ECS on Fargate",t:"Serverless containers",d:"Run tasks and services without managing servers."},{n:"AWS App Runner",t:"Simplest",d:"Container web services with minimal configuration."}],
+ pick:"Container Apps and ECS Fargate are the direct equivalents. Pick them when you do not need the full Kubernetes API.",cost:"Set min replicas to 0 on non-production apps. Right-size CPU and memory from real usage."},
+{id:"k8s",cat:"Containers",title:"Managed Kubernetes",desc:"Full Kubernetes with its API, Helm, operators and custom networking.",
+ az:[{n:"Azure Kubernetes Service (AKS)",t:"Managed K8s",d:"Managed control plane, node pools, autoscaler, Azure RBAC and ACR integration."}],
+ aw:[{n:"Amazon EKS",t:"Managed K8s",d:"Managed control plane, managed node groups or Fargate, IAM roles for service accounts."}],
+ pick:"Choose Kubernetes for many services, operators or portability. If you only run a few simple apps, Container Apps or ECS is less work.",cost:"Use the cluster autoscaler, spot or low-priority node pools for non-critical work, and stop dev clusters out of hours."},
+{id:"serverless",cat:"Compute",title:"Serverless functions / event-driven code",desc:"Run code on events or HTTP calls and pay per execution.",
+ az:[{n:"Azure Functions",t:"Serverless",d:"Triggers and bindings for HTTP, queues, timers, Blob, Event Hubs."}],
+ aw:[{n:"AWS Lambda",t:"Serverless",d:"Run code on events from S3, SQS, API Gateway, EventBridge and more."}],
+ pick:"Good for glue code, webhooks and light APIs. Watch cold starts and execution time limits for heavy work.",cost:"Pay per execution and duration. Tune memory size, since it also sets CPU and affects cost."},
+{id:"vm",cat:"Compute",title:"Virtual machines",desc:"Full control over the OS, for lift-and-shift, legacy or custom software.",
+ az:[{n:"Azure Virtual Machines (+ VM Scale Sets)",t:"IaaS",d:"Wide range of VM sizes, scale sets, reservations and spot VMs."}],
+ aw:[{n:"Amazon EC2 (+ Auto Scaling groups)",t:"IaaS",d:"Many instance families, Auto Scaling, Savings Plans and spot instances."}],
+ pick:"Use VMs when you need OS-level control or the software cannot be containerised.",cost:"Find idle or over-provisioned instances with Azure Advisor or AWS Compute Optimizer, then right-size. Use reservations or Savings Plans for steady workloads."},
+{id:"batch",cat:"Compute",title:"Batch jobs and scheduled tasks",desc:"Run jobs on a schedule or process queues of work.",
+ az:[{n:"Container Apps jobs",t:"Simple",d:"Run containers on a schedule or on demand."},{n:"Azure Batch",t:"Large scale",d:"Large parallel and HPC workloads."}],
+ aw:[{n:"ECS scheduled tasks / EventBridge Scheduler",t:"Simple",d:"Run container tasks on a schedule."},{n:"AWS Batch",t:"Large scale",d:"Managed batch computing on EC2 or Fargate."}],
+ pick:"Scheduled container jobs cover most cases. Use Batch services for big parallel workloads.",cost:"Use spot or low-priority capacity where jobs can be retried."},
+{id:"registry",cat:"Containers",title:"Container image registry",desc:"Store and scan Docker images privately.",
+ az:[{n:"Azure Container Registry (ACR)",t:"Managed",d:"Private registry with geo-replication, tasks and AKS integration."}],
+ aw:[{n:"Amazon ECR",t:"Managed",d:"Private registry with scanning and lifecycle policies."}],
+ pick:"Use the registry on the same cloud as your runtime, so pulls are fast and authentication is simple.",cost:"Set retention or lifecycle rules to delete old image tags."},
+{id:"relational",cat:"Database",title:"Managed relational database",desc:"MySQL, PostgreSQL or SQL Server with backups, patching and high availability.",
+ az:[{n:"Azure Database for PostgreSQL / MySQL (Flexible Server)",t:"Open source",d:"Managed PostgreSQL and MySQL with zone-redundant HA options."},{n:"Azure SQL Database",t:"SQL Server",d:"Managed SQL Server engine with serverless and elastic options."}],
+ aw:[{n:"Amazon RDS",t:"Managed engines",d:"PostgreSQL, MySQL, MariaDB, SQL Server and Oracle."},{n:"Amazon Aurora",t:"Cloud-native",d:"MySQL and PostgreSQL compatible, built for performance and scale."}],
+ pick:"Stay with the engine you already run. Choose Aurora when you need higher scale or faster failover on AWS.",cost:"Right-size instances, use reservations for steady databases, and stop or scale down non-production out of hours."},
+{id:"nosql",cat:"Database",title:"NoSQL / key-value / document database",desc:"Low-latency access at large scale, flexible schema.",
+ az:[{n:"Azure Cosmos DB",t:"Multi-model",d:"Globally distributed with several APIs including NoSQL and MongoDB."}],
+ aw:[{n:"Amazon DynamoDB",t:"Key-value",d:"Serverless key-value and document database."},{n:"Amazon DocumentDB",t:"MongoDB-compatible",d:"Document database with MongoDB compatibility."}],
+ pick:"Design access patterns first. Both need careful partition key design.",cost:"Choose provisioned or on-demand capacity by how steady the traffic is, and watch hot partitions."},
+{id:"cache",cat:"Database",title:"In-memory cache",desc:"Speed up reads and store sessions with Redis-compatible caching.",
+ az:[{n:"Azure Cache for Redis / Azure Managed Redis",t:"Managed Redis",d:"Managed Redis for caching and sessions. Check which Redis offering is current for new builds."}],
+ aw:[{n:"Amazon ElastiCache",t:"Managed Redis/Valkey",d:"Managed in-memory caching."},{n:"Amazon MemoryDB",t:"Durable",d:"Redis-compatible with durable storage."}],
+ pick:"Use as a cache in front of a database. Use MemoryDB only if you need it as a primary store.",cost:"Size the cache from the working set, not the whole database."},
+{id:"object",cat:"Storage",title:"Object storage (files, backups, data lake)",desc:"Store unlimited unstructured data with tiers and lifecycle rules.",
+ az:[{n:"Azure Blob Storage",t:"Object",d:"Hot, cool, cold and archive tiers with lifecycle management."}],
+ aw:[{n:"Amazon S3",t:"Object",d:"Standard, infrequent access and Glacier classes with lifecycle rules."}],
+ pick:"Both are mature and similar. Pick the one that sits with your compute and data.",cost:"Use lifecycle rules to move old data to colder tiers, and delete incomplete uploads and old versions."},
+{id:"files",cat:"Storage",title:"Shared file storage (NFS / SMB)",desc:"A file system shared by several servers or containers.",
+ az:[{n:"Azure Files",t:"SMB/NFS",d:"Managed file shares."},{n:"Azure NetApp Files",t:"High performance",d:"Enterprise-grade NFS and SMB."}],
+ aw:[{n:"Amazon EFS",t:"NFS",d:"Elastic shared NFS for Linux."},{n:"Amazon FSx",t:"Specialised",d:"Windows File Server, Lustre, NetApp ONTAP and more."}],
+ pick:"Use Azure Files or EFS for general sharing, and the specialised services for performance or Windows needs.",cost:"Use the infrequent-access tiers for cold files."},
+{id:"queue",cat:"Compute",title:"Message queue and pub/sub",desc:"Decouple services with queues, topics and event routing.",
+ az:[{n:"Azure Service Bus",t:"Enterprise messaging",d:"Queues and topics with sessions, dead-letter and transactions."},{n:"Azure Storage Queues",t:"Simple",d:"Cheap, basic queues."},{n:"Azure Event Grid",t:"Event routing",d:"Push events to handlers."}],
+ aw:[{n:"Amazon SQS",t:"Queue",d:"Managed queues, standard and FIFO."},{n:"Amazon SNS",t:"Pub/sub",d:"Fan-out notifications."},{n:"Amazon EventBridge",t:"Event bus",d:"Route events between services and SaaS."}],
+ pick:"Service Bus is roughly SQS plus SNS in features. Event Grid and EventBridge route events.",cost:"Batch messages and use simple queues where advanced features are not needed."},
+{id:"stream",cat:"Data & AI",title:"Streaming and event ingestion",desc:"Ingest high-volume event streams and logs.",
+ az:[{n:"Azure Event Hubs",t:"Streaming",d:"High-throughput ingestion with a Kafka-compatible endpoint."}],
+ aw:[{n:"Amazon Kinesis Data Streams",t:"Streaming",d:"Real-time data streams."},{n:"Amazon MSK",t:"Managed Kafka",d:"Managed Apache Kafka."}],
+ pick:"Choose Event Hubs or MSK if you already use Kafka clients.",cost:"Size throughput units or shards to real volume and scale them down off-peak."},
+{id:"cdn",cat:"Networking",title:"CDN and global edge",desc:"Cache content close to users and speed up the first byte.",
+ az:[{n:"Azure Front Door",t:"CDN + global LB",d:"Global entry point with CDN, WAF and routing."}],
+ aw:[{n:"Amazon CloudFront",t:"CDN",d:"Global CDN with edge functions."}],
+ pick:"Front Door also does global load balancing and WAF. CloudFront is paired with AWS WAF and ALB.",cost:"A good cache hit ratio is the biggest saving on egress."},
+{id:"dns",cat:"Networking",title:"DNS",desc:"Public and private domain name resolution.",
+ az:[{n:"Azure DNS (+ Private DNS)",t:"DNS",d:"Host public zones and private zones for VNets."}],
+ aw:[{n:"Amazon Route 53",t:"DNS",d:"Public and private zones, health checks and routing policies."}],
+ pick:"Lower the TTL before any cutover or migration.",cost:"Cost is small, mostly per zone and per query."},
+{id:"lb",cat:"Networking",title:"Load balancing",desc:"Spread traffic across instances or services.",
+ az:[{n:"Application Gateway",t:"Layer 7",d:"HTTP/S routing and WAF."},{n:"Azure Load Balancer",t:"Layer 4",d:"TCP/UDP load balancing."},{n:"Front Door",t:"Global",d:"Global HTTP routing."}],
+ aw:[{n:"Application Load Balancer (ALB)",t:"Layer 7",d:"HTTP/S routing by host and path."},{n:"Network Load Balancer (NLB)",t:"Layer 4",d:"Very high-performance TCP/UDP."},{n:"Global Accelerator",t:"Global",d:"Static anycast IPs and fast failover."}],
+ pick:"HTTP apps: Application Gateway or ALB. Raw TCP: Load Balancer or NLB. Multi-region: Front Door or Global Accelerator with CloudFront.",cost:"Remove idle load balancers, as each has a fixed hourly cost."},
+{id:"waf",cat:"Security",title:"Web application firewall and DDoS protection",desc:"Block common web attacks and absorb floods.",
+ az:[{n:"Azure WAF (on Front Door / App Gateway)",t:"WAF",d:"OWASP rules and custom rules."},{n:"Azure DDoS Protection",t:"DDoS",d:"Enhanced network DDoS defence."}],
+ aw:[{n:"AWS WAF",t:"WAF",d:"Managed and custom rules on CloudFront, ALB and API Gateway."},{n:"AWS Shield",t:"DDoS",d:"Standard is automatic, Advanced adds response support."}],
+ pick:"Attach the WAF to the entry point where traffic first arrives.",cost:"Review rule count and request volume, since both affect the bill."},
+{id:"network",cat:"Networking",title:"Private network and hybrid connectivity",desc:"Isolated networks, private access to services, VPN and dedicated links.",
+ az:[{n:"Virtual Network + Private Link",t:"Network",d:"VNets, subnets, NSGs and private endpoints."},{n:"VPN Gateway / ExpressRoute",t:"Hybrid",d:"Site-to-site VPN and private circuits."}],
+ aw:[{n:"VPC + PrivateLink",t:"Network",d:"VPCs, subnets, security groups and private endpoints."},{n:"Site-to-Site VPN / Direct Connect",t:"Hybrid",d:"VPN and dedicated connections."}],
+ pick:"Plan non-overlapping IP ranges before you connect networks together.",cost:"NAT gateways and cross-zone or cross-region traffic add up. Review data transfer charges."},
+{id:"identity",cat:"Security",title:"Identity and access management",desc:"Who can do what, for people and for workloads.",
+ az:[{n:"Microsoft Entra ID + Azure RBAC + Managed Identity",t:"IAM",d:"Directory, role assignments and passwordless identities for resources."}],
+ aw:[{n:"AWS IAM + IAM Identity Center",t:"IAM",d:"Users, roles, policies and single sign-on across accounts."}],
+ pick:"Use roles and managed identities, not long-lived keys. Apply least privilege. GitHub Actions can sign in to both with OIDC.",cost:"No direct cost, but tidy access prevents expensive mistakes."},
+{id:"secrets",cat:"Security",title:"Secrets and encryption keys",desc:"Store passwords, tokens and keys safely.",
+ az:[{n:"Azure Key Vault",t:"Secrets + keys",d:"Secrets, keys and certificates with access policies or RBAC."}],
+ aw:[{n:"AWS Secrets Manager",t:"Secrets",d:"Secrets with rotation."},{n:"SSM Parameter Store / AWS KMS",t:"Config + keys",d:"Cheaper parameters, and key management."}],
+ pick:"Never place secrets in code or images. Inject them at runtime.",cost:"Secrets Manager charges per secret, so use Parameter Store for plain configuration."},
+{id:"security",cat:"Security",title:"Security posture and threat detection",desc:"Find misconfigurations and detect attacks.",
+ az:[{n:"Microsoft Defender for Cloud + Azure Policy",t:"CSPM",d:"Posture management and policy enforcement."}],
+ aw:[{n:"AWS Security Hub + GuardDuty + Config",t:"CSPM",d:"Findings, threat detection and configuration tracking."}],
+ pick:"Turn on the baseline early, then enforce rules with policy.",cost:"Enable per workload where possible and check pricing of each feature."},
+{id:"cicd",cat:"DevOps",title:"CI/CD pipelines",desc:"Build, test and deploy automatically.",
+ az:[{n:"GitHub Actions or Azure Pipelines",t:"CI/CD",d:"Pipelines with OIDC login to Azure."}],
+ aw:[{n:"GitHub Actions or CodePipeline + CodeBuild + CodeDeploy",t:"CI/CD",d:"AWS-native build and deploy services."}],
+ pick:"GitHub Actions works well on both clouds. See the CI/CD guide.",cost:"Use caching, and avoid always-on build agents."},
+{id:"iac",cat:"DevOps",title:"Infrastructure as code",desc:"Define infrastructure in version-controlled files.",
+ az:[{n:"Bicep / ARM / Terraform",t:"IaC",d:"Bicep is Azure-native. Terraform covers many clouds."}],
+ aw:[{n:"CloudFormation / CDK / Terraform",t:"IaC",d:"CloudFormation and CDK are AWS-native. Terraform is multi-cloud."}],
+ pick:"Terraform is the common choice if you use both clouds. See the Terraform guide.",cost:"Tag everything from code so spend can be tracked."},
+{id:"monitor",cat:"Observability",title:"Monitoring, logs and tracing",desc:"Metrics, logs, alerts and application performance.",
+ az:[{n:"Azure Monitor + Log Analytics + Application Insights",t:"Observability",d:"Metrics, logs and APM. Managed Grafana and Prometheus are available."}],
+ aw:[{n:"Amazon CloudWatch + X-Ray",t:"Observability",d:"Metrics, logs, alarms and tracing. Managed Grafana and Prometheus are available."}],
+ pick:"Start with the native tools, and add Grafana and Prometheus for dashboards you control.",cost:"Log ingestion and retention are the main cost. Filter noisy logs and shorten retention."},
+{id:"backup",cat:"Storage",title:"Backup and disaster recovery",desc:"Protect data and recover from failures.",
+ az:[{n:"Azure Backup + Site Recovery",t:"BCDR",d:"VM, database and file backup, plus VM replication for failover."}],
+ aw:[{n:"AWS Backup + Elastic Disaster Recovery",t:"BCDR",d:"Central backup policies, and replication for recovery."}],
+ pick:"Define RPO and RTO first. Test restores regularly.",cost:"Match retention to policy, and delete old recovery points."},
+{id:"warehouse",cat:"Data & AI",title:"Data warehouse and analytics",desc:"Query large datasets with SQL.",
+ az:[{n:"Microsoft Fabric / Azure Synapse Analytics",t:"Analytics",d:"Warehouse, lake and BI tooling."}],
+ aw:[{n:"Amazon Redshift",t:"Warehouse",d:"Columnar data warehouse."},{n:"Amazon Athena",t:"Query in place",d:"Serverless SQL on data in S3."}],
+ pick:"Athena is a quick start for data already in S3. Check which Azure analytics product is current for new projects.",cost:"Pause or scale down warehouses when idle, and partition data to scan less."},
+{id:"ai",cat:"Data & AI",title:"AI and machine learning",desc:"Use foundation models or train your own.",
+ az:[{n:"Azure OpenAI / Azure AI Foundry",t:"Foundation models",d:"Hosted models and AI app tooling."},{n:"Azure Machine Learning",t:"ML platform",d:"Train and deploy models."}],
+ aw:[{n:"Amazon Bedrock",t:"Foundation models",d:"Access foundation models through one API."},{n:"Amazon SageMaker",t:"ML platform",d:"Build, train and deploy models."}],
+ pick:"Model availability differs by cloud and region, so check the model you need.",cost:"Watch token usage and idle endpoints."},
+{id:"finops",cat:"Cost",title:"Cost management and FinOps",desc:"See, allocate and reduce cloud spend on both clouds.",
+ az:[{n:"Microsoft Cost Management + Budgets",t:"Visibility",d:"Cost analysis, budgets, alerts and exports."},{n:"Azure Advisor + Reservations / Savings Plans",t:"Optimise",d:"Rightsizing advice and commitment discounts."}],
+ aw:[{n:"AWS Cost Explorer + Budgets",t:"Visibility",d:"Cost analysis, budgets and alerts."},{n:"AWS Compute Optimizer + Savings Plans / RIs",t:"Optimise",d:"Rightsizing advice and commitment discounts."}],
+ pick:"Tag resources by env, owner and app. Find over-provisioned resources, right-size them, then commit to steady usage with reservations or Savings Plans.",cost:"Review idle resources, unattached disks, old snapshots and unused load balancers every month."}
+];
+
+const $=id=>document.getElementById(id);
+const st={cat:"All",q:"",cloud:"both",sel:U[0].id,stack:[],pick:{}};
+try{const s=JSON.parse(localStorage.getItem("cloudStack")||"null");if(s){st.stack=s.stack||[];st.pick=s.pick||{}}}catch(e){}
+function save(){try{localStorage.setItem("cloudStack",JSON.stringify({stack:st.stack,pick:st.pick}))}catch(e){}}
+const byId=id=>U.find(u=>u.id===id);
+function pk(id){return st.pick[id]||(st.pick[id]={az:0,aw:0})}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+function renderCats(){
+  $("cats").innerHTML=["All"].concat(CATS).map(c=>'<button class="chip'+(st.cat===c?" on":"")+'" data-cat="'+esc(c)+'">'+esc(c)+'</button>').join("");
+}
+function filtered(){
+  const q=st.q.trim().toLowerCase();
+  return U.filter(u=>(st.cat==="All"||u.cat===st.cat)&&(!q||(u.title+" "+u.desc+" "+u.az.map(o=>o.n).join(" ")+" "+u.aw.map(o=>o.n).join(" ")).toLowerCase().includes(q)));
+}
+function renderList(){
+  const f=filtered();
+  $("list").innerHTML=f.length?f.map(u=>'<button class="li'+(u.id===st.sel?" on":"")+'" data-id="'+u.id+'"><span>'+esc(u.title)+'</span>'+(st.stack.includes(u.id)?'<span class="added">&#10003;</span>':'<small>'+esc(u.cat)+'</small>')+'</button>').join(""):'<div class="empty">No matching use case. Try another word.</div>';
+}
+function optHtml(u,cloud){
+  const list=u[cloud],p=pk(u.id)[cloud];
+  return list.map((o,i)=>'<button class="opt'+(i===p?" sel":"")+'" data-cl="'+cloud+'" data-i="'+i+'"><b><span>'+esc(o.n)+'</span><i>'+esc(o.t)+'</i></b><span>'+esc(o.d)+'</span></button>').join("");
+}
+function renderDetail(){
+  const u=byId(st.sel);if(!u){$("detail").innerHTML="";return}
+  const both=st.cloud==="both";
+  const az='<div class="col az"><h4>AZURE</h4>'+optHtml(u,"az")+'</div>';
+  const aw='<div class="col aw"><h4>AWS</h4>'+optHtml(u,"aw")+'</div>';
+  const inStack=st.stack.includes(u.id);
+  $("detail").innerHTML='<h2>'+esc(u.title)+'</h2><div class="dsc">'+esc(u.desc)+'</div>'+
+   '<div class="cols'+(both?"":" one")+'">'+(st.cloud!=="aw"?az:"")+(st.cloud!=="az"?aw:"")+'</div>'+
+   '<div class="ins"><div class="ibox p"><b>WHICH TO PICK</b>'+esc(u.pick)+'</div><div class="ibox c"><b>COST TIP (FINOPS)</b>'+esc(u.cost)+'</div></div>'+
+   '<button class="addbtn'+(inStack?" rm":"")+'" id="addb">'+(inStack?"Remove from my stack":"+ Add to my stack")+'</button>';
+}
+function renderStack(){
+  const rows=st.stack.map(id=>byId(id)).filter(Boolean);
+  const show=st.cloud;
+  let h='<h3>My stack ('+rows.length+')</h3><div class="hint">Your chosen service for each use case. Click an option above to change it.</div>';
+  if(!rows.length){h+='<div class="empty">Nothing added yet. Select a use case and press "Add to my stack".</div>'}
+  else{
+    h+='<table><tr><th>Use case</th>'+(show!=="aw"?'<th>Azure</th>':"")+(show!=="az"?'<th>AWS</th>':"")+'<th></th></tr>'+
+     rows.map(u=>{const p=pk(u.id);return '<tr><td>'+esc(u.title)+'</td>'+(show!=="aw"?'<td class="azc">'+esc(u.az[p.az].n)+'</td>':"")+(show!=="az"?'<td class="awc">'+esc(u.aw[p.aw].n)+'</td>':"")+'<td><button data-rm="'+u.id+'" title="Remove" aria-label="Remove">&times;</button></td></tr>'}).join("")+'</table>'+
+     '<div class="st-actions"><button class="sbtn" id="cpy">Copy as Markdown</button><button class="sbtn" id="clr">Clear all</button></div>';
+  }
+  $("stack").innerHTML=h;
+}
+function renderAll(){renderCats();renderList();renderDetail();renderStack()}
+
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button");if(!t)return;
+  if(t.dataset.cat){st.cat=t.dataset.cat;const f=filtered();if(f.length&&!f.some(u=>u.id===st.sel))st.sel=f[0].id;renderAll();return}
+  if(t.classList.contains("li")){st.sel=t.dataset.id;renderList();renderDetail();return}
+  if(t.classList.contains("opt")){pk(st.sel)[t.dataset.cl]=+t.dataset.i;save();renderDetail();renderStack();return}
+  if(t.id==="addb"){const i=st.stack.indexOf(st.sel);if(i>=0)st.stack.splice(i,1);else st.stack.push(st.sel);save();renderList();renderDetail();renderStack();return}
+  if(t.dataset.rm){st.stack=st.stack.filter(x=>x!==t.dataset.rm);save();renderList();renderDetail();renderStack();return}
+  if(t.id==="clr"){st.stack=[];save();renderList();renderDetail();renderStack();return}
+  if(t.id==="cpy"){
+    const rows=st.stack.map(byId).filter(Boolean);
+    let md="| Use case | Azure | AWS |\n|---|---|---|\n"+rows.map(u=>{const p=pk(u.id);return "| "+u.title+" | "+u.az[p.az].n+" | "+u.aw[p.aw].n+" |"}).join("\n");
+    navigator.clipboard.writeText(md).then(()=>{t.textContent="Copied";setTimeout(()=>t.textContent="Copy as Markdown",1400)});return}
+  if(t.parentElement&&t.parentElement.id==="cloud"){st.cloud=t.dataset.c;document.querySelectorAll("#cloud button").forEach(b=>b.classList.toggle("on",b===t));renderDetail();renderStack()}
+});
+$("q").addEventListener("input",e=>{st.q=e.target.value;if(st.q.trim()&&st.cat!=="All"){st.cat="All";renderCats()}const f=filtered();if(f.length&&!f.some(u=>u.id===st.sel)){st.sel=f[0].id;renderDetail()}renderList()});
+renderAll();
+})();
+</script>
+</body></html>
