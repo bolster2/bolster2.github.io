@@ -11,7 +11,7 @@
 <p class="sub">Run a local cluster with KIND, package an app with Helm, and automate lint, test and deploy with GitHub Actions.</p>
 
 <div class="toc"><b>ON THIS PAGE</b><ol>
-<li><a href="#concepts">Fundamental concepts</a></li><li><a href="#kind">KIND cluster</a></li><li><a href="#raw">Plain manifest deployment</a></li><li><a href="#helm">Helm chart</a></li><li><a href="#ci">CI: test the chart on KIND in GitHub Actions</a></li><li><a href="#cd">CD: release with Helm</a></li><li><a href="#debug">10 production issues: troubleshooting</a></li></ol></div>
+<li><a href="#concepts">Fundamental concepts</a></li><li><a href="#kind">KIND cluster</a></li><li><a href="#raw">Plain manifest deployment</a></li><li><a href="#helm">Helm chart</a></li><li><a href="#ci">CI: test the chart on KIND in GitHub Actions</a></li><li><a href="#cd">CD: release with Helm</a></li><li><a href="#debug">10 production issues: troubleshooting</a></li><li><a href="#usecases">Top 7 troubleshooting use cases</a></li></ol></div>
 
 <h2 id="concepts">Fundamental concepts</h2>
 <p>The 24 terms to know before anything else, each with a command you will actually use.</p>
@@ -393,6 +393,259 @@ kubectl get hpa -n NS</code></pre>
 kubectl get events -A --sort-by=.lastTimestamp | tail -30
 helm status RELEASE -n NS &amp;&amp; helm history RELEASE -n NS     # Helm stuck? then: helm rollback RELEASE REV</code></pre>
 <div class="note ok">Rule of thumb: events first, then logs, then metrics. Most issues name themselves in <code>kubectl describe</code> within the first 20 lines of Events.</div>
+
+<h2 id="usecases">Top 7 troubleshooting use cases</h2>
+<p>Each case follows the same shape: <b>symptoms</b>, <b>likely causes</b>, a <b>step-by-step process</b>, then the <b>fix</b>.</p>
+<table><tr><th>#</th><th>Use case</th><th>Where it happens</th></tr>
+<tr><td>1</td><td><a href="#uc1">Node Not Ready</a></td><td>Node</td></tr>
+<tr><td>2</td><td><a href="#uc2">Node Disk Pressure</a></td><td>Node</td></tr>
+<tr><td>3</td><td><a href="#uc3">CreateContainerError</a></td><td>Container runtime</td></tr>
+<tr><td>4</td><td><a href="#uc4">CreateContainerConfigError</a></td><td>Pod config</td></tr>
+<tr><td>5</td><td><a href="#uc5">ImagePullBackOff</a></td><td>Image pull</td></tr>
+<tr><td>6</td><td><a href="#uc6">RunContainerError</a></td><td>Container start</td></tr>
+<tr><td>7</td><td><a href="#uc7">OOMKilled</a></td><td>Memory</td></tr></table>
+
+<div class="note ok"><b>Order of the pod lifecycle helps you place the error:</b> pull image (ImagePullBackOff) &rarr; validate config (CreateContainerConfigError) &rarr; create container (CreateContainerError) &rarr; start process (RunContainerError, CrashLoopBackOff) &rarr; run (OOMKilled). The status tells you which step failed.</div>
+
+<h3 id="uc1">1. How to fix Node Not Ready</h3>
+<p><b>Symptoms:</b> <code>kubectl get nodes</code> shows <code>NotReady</code>; pods on it become <code>Unknown</code> or get evicted after about 5 minutes.</p>
+<p><b>Likely causes:</b> kubelet stopped or crashed, container runtime down, network or CNI failure, node out of disk or memory, expired certificates, the VM stopped or lost connectivity to the API server.</p>
+<ol>
+<li>See which node and why: <code>kubectl get nodes</code>, then look at the <b>Conditions</b> block (Ready, MemoryPressure, DiskPressure, PIDPressure, NetworkUnavailable).</li>
+<li>Read the node events for the reason (for example "Kubelet stopped posting node status").</li>
+<li>Log in to the node and check kubelet and the runtime.</li>
+<li>Check resources: disk, memory, and the CNI pods running on that node.</li>
+<li>Fix the cause. If the node cannot be recovered, replace it.</li></ol>
+<pre><code>kubectl get nodes -o wide
+kubectl describe node NODE | grep -A12 Conditions
+kubectl get events --field-selector involvedObject.name=NODE --sort-by=.lastTimestamp
+
+# on the node
+systemctl status kubelet containerd
+journalctl -u kubelet --since "30 min ago" --no-pager | tail -50
+df -h; free -m
+crictl ps                          # runtime responding?
+
+# CNI / networking pods on that node
+kubectl get pods -n kube-system -o wide --field-selector spec.nodeName=NODE</code></pre>
+<p><b>Fix:</b></p>
+<pre><code># restart services
+sudo systemctl restart containerd
+sudo systemctl restart kubelet
+
+# free disk if full (see use case 2)
+# if the node cannot be recovered: move work off it, then replace it
+kubectl cordon NODE
+kubectl drain NODE --ignore-daemonsets --delete-emptydir-data
+kubectl delete node NODE           # self-managed: re-join a new node
+
+# AKS: reimage or scale the pool instead of fixing by hand
+az aks nodepool scale -g rg-uat --cluster-name aks-uat -n nodepool1 --node-count 3
+# or reimage the bad VM instance in the node resource group (MC_*)
+# az vmss list-instances -g MC_RG -n VMSS_NAME -o table
+# az vmss reimage -g MC_RG -n VMSS_NAME --instance-id ID</code></pre>
+<div class="note">On AKS and other managed services, prefer replacing the node (scale up, cordon and drain, delete the bad one) over repairing it in place.</div>
+
+<h3 id="uc2">2. How to fix Node Disk Pressure</h3>
+<p><b>Symptoms:</b> node condition <code>DiskPressure=True</code>, taint <code>node.kubernetes.io/disk-pressure</code>, new pods will not schedule there, and running pods are <b>Evicted</b>.</p>
+<p><b>Likely causes:</b> accumulated container images, large container logs, <code>emptyDir</code> volumes or pod writes to the container filesystem, system logs in <code>/var/log</code>, a too-small OS disk. By default the kubelet starts evicting when free space on the node's filesystem drops below about 10% (and about 15% on the image filesystem).</p>
+<ol>
+<li>Confirm the condition on the node.</li>
+<li>Find what is using the space on the node.</li>
+<li>Free space safely: unused images, old logs, evicted pods.</li>
+<li>Prevent a repeat: limits, log rotation, bigger disk.</li></ol>
+<pre><code>kubectl describe node NODE | grep -E "DiskPressure|ephemeral-storage"
+kubectl get pods -A --field-selector=status.phase=Failed     # evicted pods
+
+# on the node
+df -hT
+sudo du -xh /var --max-depth=2 2&gt;/dev/null | sort -rh | head -15
+sudo du -sh /var/lib/containerd /var/log/pods /var/log/containers 2&gt;/dev/null
+crictl images
+crictl imagefsinfo</code></pre>
+<p><b>Fix:</b></p>
+<pre><code># remove unused images
+sudo crictl rmi --prune
+
+# trim system logs
+sudo journalctl --vacuum-size=200M
+
+# delete leftover evicted pods
+kubectl delete pods -A --field-selector=status.phase=Failed
+
+# the pressure condition clears on its own once space is free and the kubelet re-evaluates</code></pre>
+<p><b>Prevent it:</b> set ephemeral-storage requests and limits, rotate container logs, and size node disks for your images and logs.</p>
+<pre data-file="ephemeral storage limits"><code>resources:
+  requests:
+    ephemeral-storage: "500Mi"
+  limits:
+    ephemeral-storage: "2Gi"</code></pre>
+<pre data-file="kubelet log rotation (kubelet config)"><code>containerLogMaxSize: 50Mi
+containerLogMaxFiles: 5</code></pre>
+
+<h3 id="uc3">3. Understanding CreateContainerError</h3>
+<p><b>Symptoms:</b> pod status <code>CreateContainerError</code>. The image was pulled, but the runtime failed to <b>create</b> the container.</p>
+<p><b>Likely causes:</b> the image has no <code>ENTRYPOINT</code>/<code>CMD</code> and the pod does not set <code>command</code>; the container name already exists on the node; a volume or <code>subPath</code> could not be mounted; invalid <code>securityContext</code>; runtime problems on the node.</p>
+<ol>
+<li>Read the exact error in the pod events.</li>
+<li>Check the container state message.</li>
+<li>Compare the pod spec (command, args, volumes, securityContext) with the image.</li>
+<li>If the message points at the runtime, check containerd on the node.</li></ol>
+<pre><code>kubectl describe pod POD -n NS | grep -A15 Events
+kubectl get pod POD -n NS -o jsonpath='{.status.containerStatuses[*].state.waiting.message}'
+kubectl get pod POD -n NS -o yaml | grep -A12 -E "command|args|volumeMounts|securityContext"
+
+# does the image define a command?
+docker inspect IMAGE --format '{{.Config.Entrypoint}} {{.Config.Cmd}}'
+
+# on the node
+journalctl -u containerd --since "15 min ago" --no-pager | tail -40</code></pre>
+<p><b>Fix by message:</b></p>
+<table><tr><th>Message contains</th><th>Fix</th></tr>
+<tr><td>no command specified</td><td>Add <code>command</code>/<code>args</code> to the pod, or fix the Dockerfile <code>CMD</code>.</td></tr>
+<tr><td>name is already in use</td><td>Restart the pod; if it repeats, restart containerd on the node.</td></tr>
+<tr><td>failed to mount / subPath</td><td>Fix the volume or the path it points at; make sure the file or directory exists.</td></tr>
+<tr><td>runAsUser / security context errors</td><td>Correct <code>securityContext</code> values to match the image and cluster policy.</td></tr></table>
+
+<h3 id="uc4">4. Understanding CreateContainerConfigError</h3>
+<p><b>Symptoms:</b> pod status <code>CreateContainerConfigError</code>. Kubernetes could not build the container's configuration, so the container never started.</p>
+<p><b>Likely causes:</b> a referenced <b>ConfigMap or Secret does not exist</b>, a <b>key is missing</b> from it, it lives in a different namespace, or the image runs as root while the pod sets <code>runAsNonRoot: true</code>.</p>
+<ol>
+<li><code>kubectl describe pod</code>. The Events line names the exact thing missing, for example <code>secret "db" not found</code> or <code>couldn't find key password in Secret</code>.</li>
+<li>List the ConfigMaps and Secrets in the <b>same namespace</b>.</li>
+<li>Check the key names for typos (they are case-sensitive).</li>
+<li>Create or correct the object. The pod retries by itself.</li></ol>
+<pre><code>kubectl describe pod POD -n NS | grep -A10 Events
+kubectl get configmap,secret -n NS
+kubectl get secret db -n NS -o jsonpath='{.data}' | head -c 300
+kubectl get pod POD -n NS -o yaml | grep -B2 -A6 -E "configMapKeyRef|secretKeyRef|envFrom"</code></pre>
+<p><b>Fix:</b></p>
+<pre><code>kubectl create secret generic db -n NS --from-literal=password=VALUE
+kubectl create configmap app-config -n NS --from-literal=LOG_LEVEL=info
+# the pod picks them up on its next retry; or: kubectl delete pod POD -n NS</code></pre>
+<pre data-file="make a reference optional"><code>env:
+  - name: FEATURE_FLAG
+    valueFrom:
+      configMapKeyRef:
+        name: app-config
+        key: FEATURE_FLAG
+        optional: true          # pod starts even if it is missing</code></pre>
+<div class="note">For the <code>runAsNonRoot</code> case, either set a numeric user in the Dockerfile (<code>USER 1000</code>) or set <code>runAsUser: 1000</code> in the pod's <code>securityContext</code>. A non-numeric <code>USER node</code> can fail this check, so a numeric ID is safer.</div>
+
+<h3 id="uc5">5. Understanding ImagePullBackOff</h3>
+<p><b>Symptoms:</b> <code>ErrImagePull</code> first, then <code>ImagePullBackOff</code> as Kubernetes retries with growing delays.</p>
+<p><b>Likely causes:</b> wrong image name or tag, private registry without credentials, expired token, registry rate limit (Docker Hub), network, DNS or firewall blocking the registry, or an image built for a different CPU architecture.</p>
+<ol>
+<li>Read the pull error in the events. It names the cause.</li>
+<li>Confirm the image and tag exist in the registry.</li>
+<li>Confirm the cluster has credentials for that registry.</li>
+<li>Test the pull from the node itself.</li></ol>
+<table><tr><th>Error text</th><th>Meaning and fix</th></tr>
+<tr><td>manifest unknown / not found</td><td>Tag or repository name is wrong. Correct it in the manifest.</td></tr>
+<tr><td>unauthorized / authentication required</td><td>Missing or wrong credentials. Add <code>imagePullSecrets</code> or attach ACR.</td></tr>
+<tr><td>toomanyrequests</td><td>Docker Hub rate limit. Authenticate, or mirror the image into your ACR.</td></tr>
+<tr><td>i/o timeout / no such host</td><td>Network or DNS egress problem from the node.</td></tr>
+<tr><td>no matching manifest for linux/amd64</td><td>Image built for another architecture. Rebuild for the node's platform.</td></tr></table>
+<pre><code>kubectl describe pod POD -n NS | grep -A10 Events
+kubectl get pod POD -n NS -o jsonpath='{.spec.containers[*].image}'
+
+# does the tag exist?  (ACR)
+az acr repository show-tags -n myacr --repository myapp -o table
+# can the cluster pull from ACR?
+az aks check-acr -n aks-uat -g rg-uat --acr myacr.azurecr.io
+
+# test a pull directly on the node
+sudo crictl pull myacr.azurecr.io/myapp:1.0</code></pre>
+<p><b>Fix:</b></p>
+<pre><code># AKS + ACR (no secret needed)
+az aks update -n aks-uat -g rg-uat --attach-acr myacr
+
+# any other private registry
+kubectl create secret docker-registry regcred -n NS \
+  --docker-server=REGISTRY --docker-username=USER --docker-password=PASSWORD
+# then reference it:
+#   spec:
+#     imagePullSecrets:
+#       - name: regcred
+
+# KIND (local images are not in a registry)
+kind load docker-image myapp:dev --name dev</code></pre>
+
+<h3 id="uc6">6. Understanding RunContainerError</h3>
+<p><b>Symptoms:</b> pod status <code>RunContainerError</code>. The container was created, but the runtime could not <b>start</b> its process.</p>
+<p><b>Likely causes:</b> the command or entrypoint file does not exist in the image (<code>executable file not found in $PATH</code>), the script is not executable or has Windows line endings, wrong CPU architecture (<code>exec format error</code>), a volume mount that fails, or a bad <code>securityContext</code>.</p>
+<ol>
+<li>Read the exact start error from the events or the container state.</li>
+<li>Run the same image locally with the same command to reproduce it.</li>
+<li>Check that the file exists, is executable, and has the right interpreter line.</li>
+<li>Check the image architecture and the mounts.</li></ol>
+<pre><code>kubectl describe pod POD -n NS | grep -A12 -E "State|Events"
+kubectl get pod POD -n NS -o jsonpath='{.status.containerStatuses[*].state}'
+
+# reproduce
+docker run --rm -it --entrypoint sh IMAGE
+ls -l /app/start.sh; head -1 /app/start.sh          # interpreter line, exec bit
+
+# architecture of the image
+docker image inspect IMAGE --format '{{.Architecture}}'
+kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.architecture}'</code></pre>
+<table><tr><th>Message contains</th><th>Fix</th></tr>
+<tr><td>executable file not found</td><td>Use the correct path in <code>command</code>; install the binary in the image.</td></tr>
+<tr><td>permission denied</td><td><code>chmod +x</code> the script in the Dockerfile, and check the user.</td></tr>
+<tr><td>no such file or directory (on a script)</td><td>Fix the shebang, or convert CRLF to LF (<code>dos2unix</code>).</td></tr>
+<tr><td>exec format error</td><td>Build for the node's architecture: <code>docker buildx build --platform linux/amd64</code>.</td></tr></table>
+<pre data-file="Dockerfile fix"><code>COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh &amp;&amp; sed -i 's/\r$//' /app/start.sh
+ENTRYPOINT ["/app/start.sh"]</code></pre>
+<p>Use <code>kubectl debug</code> to get a shell next to a failing pod when you cannot reproduce it locally:</p>
+<pre><code>kubectl debug -it POD -n NS --image=busybox:1.36 --target=CONTAINER</code></pre>
+
+<h3 id="uc7">7. Understanding OOMKilled</h3>
+<p><b>Symptoms:</b> container restarts, <code>Last State: Terminated, Reason: OOMKilled, Exit Code: 137</code>, often followed by <code>CrashLoopBackOff</code>.</p>
+<p><b>Likely causes:</b> the memory <b>limit is lower than what the app needs</b>, a memory leak, a runtime that ignores the container limit (JVM or Node heap), a traffic spike, or the node itself running out of memory so the kernel kills a process.</p>
+<ol>
+<li>Confirm the reason and exit code 137 in the pod description.</li>
+<li>Decide: is it the <b>container limit</b> or a <b>node-wide</b> shortage? (Node events and <code>kubectl top nodes</code> tell you.)</li>
+<li>Look at actual usage against the limit.</li>
+<li>Fix the limit, the app memory settings, or the leak, in that order of effort.</li></ol>
+<pre><code>kubectl describe pod POD -n NS | grep -A8 "Last State"
+kubectl get pod POD -n NS -o jsonpath='{.status.containerStatuses[0].lastState.terminated}'
+kubectl top pod POD -n NS --containers
+kubectl top nodes
+kubectl get events -n NS --sort-by=.lastTimestamp | grep -i -E "oom|evict"
+
+# on the node: kernel OOM log
+sudo dmesg -T | grep -i -E "oom|killed process"</code></pre>
+<p><b>Fix:</b></p>
+<pre data-file="raise requests and limits from observed usage"><code>resources:
+  requests:
+    memory: "256Mi"
+  limits:
+    memory: "512Mi"     # set above the observed peak, with headroom</code></pre>
+<pre data-file="make the runtime respect the limit"><code># Java: size the heap from the container limit
+env:
+  - name: JAVA_TOOL_OPTIONS
+    value: "-XX:MaxRAMPercentage=75.0"
+
+# Node.js: keep the heap below the container limit (value in MB)
+env:
+  - name: NODE_OPTIONS
+    value: "--max-old-space-size=384"</code></pre>
+<ul>
+<li>If usage climbs steadily and never drops, it is a leak. Profile the app instead of raising limits again.</li>
+<li>If many pods hit the limit at once, check the HPA and for a traffic spike.</li>
+<li>For node-level OOM, add nodes or move heavy pods, and always set <code>requests</code> so the scheduler places pods properly.</li></ul>
+
+<h3>Quick decision flow</h3>
+<pre><code>kubectl get pod POD -n NS          # read STATUS
+  |
+  |- ImagePullBackOff / ErrImagePull       -> use case 5  (image / registry)
+  |- CreateContainerConfigError            -> use case 4  (missing ConfigMap/Secret/key)
+  |- CreateContainerError                  -> use case 3  (runtime could not create it)
+  |- RunContainerError                     -> use case 6  (process could not start)
+  |- CrashLoopBackOff + exit 137 / OOM     -> use case 7  (memory)
+  |- Pod Pending / Evicted                 -> use case 2  (node disk pressure) or scheduling
+  `- Pods Unknown, node NotReady           -> use case 1  (node health)</code></pre>
 
 <div class="pager"><a href="terraform.html">&larr; Terraform</a><a href="aca-aks.html">ACA &amp; AKS &rarr;</a></div>
 </main><footer>&copy; 2026 Himansu Kumar Behera</footer>
