@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dockerfile Basics + Node App | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css"></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a class="on" href="docker.html">Docker</a><a href="linux-migration.html">Migration</a></div></nav>
+<main>
+<div class="tag">GUIDE 05</div>
+<h1><span class="grad">Dockerfile</span> basics with a Node.js app</h1>
+<p class="sub">Instructions, build and run commands, a production-grade multi-stage Dockerfile, Compose, and pushing to a registry.</p>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#instr">Dockerfile instructions</a></li><li><a href="#app">The sample Node app</a></li><li><a href="#simple">Simple Dockerfile</a></li><li><a href="#prod">Production multi-stage Dockerfile</a></li><li><a href="#run">Build and run</a></li><li><a href="#compose">Docker Compose</a></li><li><a href="#push">Push to ACR / Docker Hub</a></li><li><a href="#tips">Best practices</a></li></ol></div>
+
+<h2 id="instr">Dockerfile instructions</h2>
+<table><tr><th>Instruction</th><th>Purpose</th></tr>
+<tr><td><code>FROM</code></td><td>Base image. Start of a stage.</td></tr>
+<tr><td><code>WORKDIR</code></td><td>Set working directory inside the image.</td></tr>
+<tr><td><code>COPY</code></td><td>Copy files from the build context.</td></tr>
+<tr><td><code>RUN</code></td><td>Run a command at build time and bake the result into a layer.</td></tr>
+<tr><td><code>ENV</code></td><td>Set an environment variable.</td></tr>
+<tr><td><code>EXPOSE</code></td><td>Document the listening port (does not publish it).</td></tr>
+<tr><td><code>USER</code></td><td>Switch to a non-root user.</td></tr>
+<tr><td><code>CMD</code></td><td>Default command at container start (overridable).</td></tr>
+<tr><td><code>ENTRYPOINT</code></td><td>Fixed executable; <code>CMD</code> supplies its default arguments.</td></tr>
+<tr><td><code>HEALTHCHECK</code></td><td>Command Docker uses to judge container health.</td></tr></table>
+
+<h2 id="app">The sample Node app</h2>
+<pre><code>myapp/
+  server.js
+  package.json
+  Dockerfile
+  .dockerignore</code></pre>
+<pre data-file="server.js"><code>const http = require("http");
+const port = process.env.PORT || 3000;
+
+const server = http.createServer((req, res) =&gt; {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ status: "ok" }));
+  }
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end(`Hello from Node ${process.version}\n`);
+});
+
+server.listen(port, () =&gt; console.log(`Listening on ${port}`));
+
+// graceful shutdown so rolling updates do not drop requests
+process.on("SIGTERM", () =&gt; server.close(() =&gt; process.exit(0)));</code></pre>
+<pre data-file="package.json"><code>{
+  "name": "myapp",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" }
+}</code></pre>
+<pre data-file=".dockerignore"><code>node_modules
+npm-debug.log
+.git
+.gitignore
+Dockerfile
+.env
+*.md</code></pre>
+
+<h2 id="simple">Simple Dockerfile</h2>
+<pre data-file="Dockerfile"><code>FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY . .
+EXPOSE 3000
+CMD ["node", "server.js"]</code></pre>
+<div class="note ok">Copying <code>package*.json</code> before the rest of the code lets Docker reuse the cached dependency layer when only your source changes. This makes rebuilds much faster.</div>
+<p>This sample has no dependencies, so it would have no lockfile. Run <code>npm install</code> once to generate <code>package-lock.json</code> before using <code>npm ci</code>, or use <code>npm install --omit=dev</code> instead.</p>
+
+<h2 id="prod">Production multi-stage Dockerfile</h2>
+<pre data-file="Dockerfile"><code># ---- build stage ----
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+# RUN npm run build        # uncomment for TypeScript / bundlers
+
+# ---- runtime stage ----
+FROM node:20-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev &amp;&amp; npm cache clean --force
+COPY --from=build /app .
+# COPY --from=build /app/dist ./dist   # when using a build step
+
+# never run as root
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+  CMD wget -qO- http://localhost:3000/health || exit 1
+CMD ["node", "server.js"]</code></pre>
+
+<h2 id="run">Build and run</h2>
+<pre><code>docker build -t myapp:1.0 .
+docker run -d --name myapp -p 8080:3000 -e PORT=3000 myapp:1.0
+curl http://localhost:8080/health
+
+docker ps
+docker logs -f myapp
+docker exec -it myapp sh
+docker stop myapp &amp;&amp; docker rm myapp
+
+docker images
+docker image prune -f            # remove dangling images
+docker system df                 # disk usage</code></pre>
+
+<h2 id="compose">Docker Compose</h2>
+<pre data-file="docker-compose.yml"><code>services:
+  app:
+    build: .
+    ports:
+      - "8080:3000"
+    environment:
+      PORT: 3000
+      DB_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: example     # use secrets in real environments
+      POSTGRES_DB: app
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  dbdata:</code></pre>
+<pre><code>docker compose up -d --build
+docker compose logs -f app
+docker compose down            # add -v to also delete volumes</code></pre>
+
+<h2 id="push">Push to ACR / Docker Hub</h2>
+<pre><code># Azure Container Registry
+az acr login --name myacr
+docker tag myapp:1.0 myacr.azurecr.io/myapp:1.0
+docker push myacr.azurecr.io/myapp:1.0
+
+# or build in the cloud without local Docker
+az acr build -r myacr -t myapp:1.0 .
+
+# Docker Hub
+docker login
+docker tag myapp:1.0 YOUR_USER/myapp:1.0
+docker push YOUR_USER/myapp:1.0</code></pre>
+
+<h2 id="tips">Best practices</h2>
+<ul>
+<li>Pin base image versions (<code>node:20-alpine</code>), not <code>latest</code>.</li>
+<li>Use multi-stage builds so compilers and dev dependencies stay out of the final image.</li>
+<li>Run as a non-root user and use a <code>.dockerignore</code>.</li>
+<li>One process per container; log to stdout/stderr.</li>
+<li>Never bake secrets into images. Pass them at runtime.</li>
+<li>Scan images: <code>docker scout cves myapp:1.0</code> or Trivy (<code>trivy image myapp:1.0</code>).</li>
+</ul>
+
+<div class="pager"><a href="aca-aks.html">&larr; ACA &amp; AKS</a><a href="linux-migration.html">Linux migration &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+<script src="guide.js"></script></body></html>

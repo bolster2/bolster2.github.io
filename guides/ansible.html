@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ansible Basics | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css"></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a class="on" href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a></div></nav>
+<main>
+<div class="tag">GUIDE 01</div>
+<h1><span class="grad">Ansible</span> basics</h1>
+<p class="sub">Agentless configuration management over SSH: inventory, ad-hoc commands, playbooks, handlers, roles and Vault.</p>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#install">Install and concepts</a></li><li><a href="#inventory">Inventory</a></li><li><a href="#adhoc">Ad-hoc commands</a></li><li><a href="#playbook">First playbook</a></li><li><a href="#vars">Variables, templates, handlers</a></li><li><a href="#roles">Roles</a></li><li><a href="#vault">Vault for secrets</a></li><li><a href="#tips">Best practices</a></li></ol></div>
+
+<h2 id="install">Install and concepts</h2>
+<pre><code>python3 -m pip install --user ansible
+ansible --version</code></pre>
+<table><tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>Control node</td><td>The machine you run Ansible from. Needs Python. On Windows use WSL.</td></tr>
+<tr><td>Managed node</td><td>Target server. Needs only SSH and Python.</td></tr>
+<tr><td>Inventory</td><td>List of hosts and groups.</td></tr>
+<tr><td>Module</td><td>A unit of work (<code>apt</code>, <code>copy</code>, <code>service</code>).</td></tr>
+<tr><td>Playbook</td><td>YAML file with plays, each mapping hosts to tasks.</td></tr>
+<tr><td>Idempotent</td><td>Running twice changes nothing the second time.</td></tr></table>
+
+<h2 id="inventory">Inventory</h2>
+<pre data-file="inventory.ini"><code>[web]
+web1 ansible_host=10.0.1.11
+web2 ansible_host=10.0.1.12
+
+[db]
+db1 ansible_host=10.0.2.21
+
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/id_ed25519</code></pre>
+<pre><code>ansible-inventory -i inventory.ini --list
+ansible all -i inventory.ini -m ping</code></pre>
+
+<h2 id="adhoc">Ad-hoc commands</h2>
+<pre><code>ansible web -i inventory.ini -m apt -a "name=nginx state=present update_cache=yes" --become
+ansible web -i inventory.ini -m service -a "name=nginx state=restarted" --become
+ansible all -i inventory.ini -a "df -h"
+ansible db  -i inventory.ini -m copy -a "src=./my.cnf dest=/etc/mysql/my.cnf" --become</code></pre>
+
+<h2 id="playbook">First playbook</h2>
+<pre data-file="site.yml"><code>---
+- name: Configure web servers
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+
+    - name: Ensure nginx is enabled and running
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Open firewall for HTTP
+      community.general.ufw:
+        rule: allow
+        port: "80"
+        proto: tcp</code></pre>
+<pre><code>ansible-playbook -i inventory.ini site.yml --check --diff   # dry run
+ansible-playbook -i inventory.ini site.yml                  # apply
+ansible-playbook -i inventory.ini site.yml --limit web1 -v  # one host, verbose</code></pre>
+
+<h2 id="vars">Variables, templates, handlers</h2>
+<pre data-file="site.yml"><code>---
+- name: Web with template and handler
+  hosts: web
+  become: true
+  vars:
+    app_port: 8080
+    server_name: example.com
+  tasks:
+    - name: Render nginx site config
+      ansible.builtin.template:
+        src: templates/site.conf.j2
+        dest: /etc/nginx/conf.d/site.conf
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Only on Ubuntu
+      ansible.builtin.debug:
+        msg: "Ubuntu {{ ansible_distribution_version }}"
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Create several users
+      ansible.builtin.user:
+        name: "{{ item }}"
+        shell: /bin/bash
+      loop: [deploy, backup]
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded</code></pre>
+<pre data-file="templates/site.conf.j2"><code>server {
+    listen 80;
+    server_name {{ server_name }};
+    location / {
+        proxy_pass http://127.0.0.1:{{ app_port }};
+    }
+}</code></pre>
+<div class="note ok">Handlers run once at the end of the play, and only if a task that notified them reported <code>changed</code>.</div>
+
+<h2 id="roles">Roles</h2>
+<pre><code>ansible-galaxy init roles/nginx
+
+roles/nginx/
+  tasks/main.yml        # the tasks
+  handlers/main.yml
+  templates/            # .j2 files
+  defaults/main.yml     # lowest-priority variables
+  vars/main.yml</code></pre>
+<pre data-file="site.yml"><code>- hosts: web
+  become: true
+  roles:
+    - nginx</code></pre>
+
+<h2 id="vault">Vault for secrets</h2>
+<pre><code>ansible-vault create group_vars/all/vault.yml
+ansible-vault edit   group_vars/all/vault.yml
+ansible-playbook site.yml --ask-vault-pass
+ansible-playbook site.yml --vault-password-file ~/.vault_pass</code></pre>
+<div class="note">Never commit the vault password file. In CI, pass it from a secret.</div>
+
+<h2 id="tips">Best practices</h2>
+<ul>
+<li>Use fully qualified module names (<code>ansible.builtin.copy</code>).</li>
+<li>Prefer modules over <code>shell</code>/<code>command</code>, so tasks stay idempotent.</li>
+<li>Always run <code>--check --diff</code> before applying to production.</li>
+<li>Keep one inventory per environment (<code>inventories/uat</code>, <code>inventories/prod</code>).</li>
+<li>Lint with <code>ansible-lint</code> in CI.</li>
+</ul>
+
+<div class="pager"><a href="../index.html#guides">&larr; All guides</a><a href="terraform.html">Terraform + GitHub Actions &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+<script src="guide.js"></script></body></html>

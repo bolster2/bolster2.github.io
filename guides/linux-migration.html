@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linux Server Migration + Automation | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css"></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a class="on" href="linux-migration.html">Migration</a></div></nav>
+<main>
+<div class="tag">GUIDE 06</div>
+<h1><span class="grad">Linux</span> server migration: commands and automation</h1>
+<p class="sub">Move an application server (web, app, database) to a new Linux host with minimal downtime: assess, prepare, sync, cut over, verify, roll back.</p>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#plan">Migration plan</a></li><li><a href="#assess">1. Assess the source</a></li><li><a href="#prep">2. Prepare the target</a></li><li><a href="#files">3. Sync files with rsync</a></li><li><a href="#db">4. Migrate databases</a></li><li><a href="#cutover">5. Cutover</a></li><li><a href="#verify">6. Verify</a></li><li><a href="#auto">Automation script</a></li><li><a href="#ansible">Automation with Ansible</a></li><li><a href="#rollback">Rollback</a></li><li><a href="#checklist">Checklist</a></li></ol></div>
+
+<h2 id="plan">Migration plan</h2>
+<table><tr><th>Phase</th><th>Goal</th><th>Downtime?</th></tr>
+<tr><td>Assess</td><td>Inventory OS, packages, services, cron, ports, data size</td><td>No</td></tr>
+<tr><td>Prepare</td><td>Build target, install same stack, lower DNS TTL</td><td>No</td></tr>
+<tr><td>Initial sync</td><td>Copy bulk data while source is live</td><td>No</td></tr>
+<tr><td>Final sync + DB</td><td>Freeze writes, copy the delta, dump/restore DB</td><td>Short window</td></tr>
+<tr><td>Cutover</td><td>Switch DNS / load balancer to target</td><td>Seconds</td></tr>
+<tr><td>Verify and watch</td><td>Test, monitor, keep source ready for rollback</td><td>No</td></tr></table>
+<div class="note">Always take a backup or snapshot of the source first, and rehearse the whole procedure on UAT before touching production.</div>
+
+<h2 id="assess">1. Assess the source</h2>
+<pre><code>cat /etc/os-release; uname -r; hostname -f
+lscpu | head -20; free -h; df -hT; lsblk
+ip -br a; ss -tulpn                       # IPs and listening ports
+systemctl list-units --type=service --state=running
+dpkg -l &gt; packages.txt                    # Debian/Ubuntu
+rpm -qa &gt; packages.txt                    # RHEL/CentOS
+crontab -l; ls /etc/cron.*; cat /etc/crontab
+cat /etc/fstab; cat /etc/hosts
+ls /etc/nginx /etc/apache2 /etc/httpd 2&gt;/dev/null
+du -sh /var/www /opt /home /var/lib/mysql /var/lib/postgresql 2&gt;/dev/null
+getent passwd | awk -F: '$3&gt;=1000{print $1}'   # human users
+sudo iptables -S; sudo ufw status</code></pre>
+
+<h2 id="prep">2. Prepare the target</h2>
+<pre><code># same OS family and versions where possible
+sudo apt update &amp;&amp; sudo apt -y upgrade
+sudo apt install -y nginx mysql-server rsync   # match source stack
+
+# re-create users with the same UID/GID so file ownership stays correct
+sudo groupadd -g 1001 deploy
+sudo useradd  -m -u 1001 -g 1001 -s /bin/bash deploy
+
+# passwordless SSH from target to source for rsync
+ssh-keygen -t ed25519 -f ~/.ssh/migrate -N ""
+ssh-copy-id -i ~/.ssh/migrate.pub user@SOURCE_IP
+
+# lower DNS TTL to 300s a day or two before cutover</code></pre>
+
+<h2 id="files">3. Sync files with rsync</h2>
+<pre><code># dry run first
+rsync -aHAXzn --info=progress2 -e "ssh -i ~/.ssh/migrate" \
+  user@SOURCE_IP:/var/www/ /var/www/
+
+# initial sync (source still live)
+sudo rsync -aHAXz --info=progress2 --numeric-ids -e "ssh -i ~/.ssh/migrate" \
+  --rsync-path="sudo rsync" user@SOURCE_IP:/var/www/ /var/www/
+
+# configs
+sudo rsync -aHAXz -e "ssh -i ~/.ssh/migrate" --rsync-path="sudo rsync" \
+  user@SOURCE_IP:/etc/nginx/ /etc/nginx/</code></pre>
+<table><tr><th>Flag</th><th>Meaning</th></tr>
+<tr><td><code>-a</code></td><td>Archive: recursive, preserve perms, times, owners, symlinks</td></tr>
+<tr><td><code>-H -A -X</code></td><td>Keep hard links, ACLs, extended attributes</td></tr>
+<tr><td><code>-z</code></td><td>Compress during transfer</td></tr>
+<tr><td><code>-n</code></td><td>Dry run</td></tr>
+<tr><td><code>--numeric-ids</code></td><td>Keep raw UID/GID, not name mapping</td></tr>
+<tr><td><code>--delete</code></td><td>Remove files at target that no longer exist at source (use only on the final sync)</td></tr></table>
+<p>Run the same rsync again at cutover time. It copies only what changed, so the final window is short.</p>
+
+<h2 id="db">4. Migrate databases</h2>
+<h3>MySQL / MariaDB</h3>
+<pre><code># on source: consistent dump without locking InnoDB tables
+mysqldump --single-transaction --routines --triggers --events \
+  --all-databases -u root -p | gzip &gt; all.sql.gz
+
+# copy and restore
+scp all.sql.gz user@TARGET_IP:/tmp/
+gunzip -c /tmp/all.sql.gz | mysql -u root -p</code></pre>
+<h3>PostgreSQL</h3>
+<pre><code>pg_dump -Fc -U postgres appdb -f appdb.dump          # one database
+pg_dumpall -U postgres --globals-only &gt; globals.sql  # roles
+scp appdb.dump globals.sql user@TARGET_IP:/tmp/
+
+psql -U postgres -f /tmp/globals.sql
+createdb -U postgres appdb
+pg_restore -U postgres -d appdb -j 4 /tmp/appdb.dump</code></pre>
+<h3>Check the data matches</h3>
+<pre><code>mysql -e "SELECT table_schema, SUM(table_rows) FROM information_schema.tables GROUP BY 1;"
+psql -d appdb -c "SELECT relname, n_live_tup FROM pg_stat_user_tables ORDER BY 1;"</code></pre>
+<div class="note ok">For near-zero downtime on large databases, set up replication (MySQL replica or PostgreSQL streaming/logical replication) and promote the target at cutover instead of dump and restore.</div>
+
+<h2 id="cutover">5. Cutover</h2>
+<ol>
+<li>Announce the maintenance window.</li>
+<li>Stop the app on the source (or put it in read-only/maintenance mode).</li>
+<li>Run the final <code>rsync</code> and the final database dump/restore.</li>
+<li>Start services on the target: <code>sudo systemctl enable --now nginx mysql app</code>.</li>
+<li>Test on the target before switching, by forcing the hostname locally:
+<pre><code>curl -s --resolve example.com:443:TARGET_IP https://example.com/health -k</code></pre></li>
+<li>Switch DNS (A record) or the load balancer backend to the target.</li>
+<li>Keep the source stopped but intact for the rollback period.</li>
+</ol>
+
+<h2 id="verify">6. Verify</h2>
+<pre><code>systemctl --failed
+ss -tulpn | grep -E ':80|:443|:3306|:5432'
+journalctl -u nginx -u app --since "10 min ago" --no-pager
+curl -fsS https://example.com/health
+dig +short example.com
+tail -f /var/log/nginx/error.log
+sudo crontab -l -u deploy
+openssl s_client -connect example.com:443 -servername example.com &lt;/dev/null 2&gt;/dev/null | openssl x509 -noout -dates</code></pre>
+
+<h2 id="auto">Automation script</h2>
+<p>A reusable Bash script run from the <b>target</b>. It does a dry run unless you pass <code>--apply</code>, and it logs everything.</p>
+<pre data-file="migrate.sh"><code>#!/usr/bin/env bash
+# Usage: ./migrate.sh --source user@10.0.0.5 [--apply]
+set -euo pipefail
+
+SOURCE=""; APPLY=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --source) SOURCE="$2"; shift 2 ;;
+    --apply)  APPLY=1; shift ;;
+    *) echo "unknown arg $1"; exit 1 ;;
+  esac
+done
+[[ -z "$SOURCE" ]] &amp;&amp; { echo "--source required"; exit 1; }
+
+KEY="$HOME/.ssh/migrate"
+LOG="/var/log/migrate-$(date +%F-%H%M).log"
+PATHS=("/var/www" "/etc/nginx" "/opt/app")
+DB_DUMP="/tmp/all-$(date +%F).sql.gz"
+RSYNC_OPTS=(-aHAXz --numeric-ids --info=stats1 -e "ssh -i $KEY" --rsync-path="sudo rsync")
+[[ $APPLY -eq 0 ]] &amp;&amp; RSYNC_OPTS+=(-n)
+
+exec &gt; &gt;(tee -a "$LOG") 2&gt;&amp;1
+echo "== $(date) migrate from $SOURCE (apply=$APPLY) =="
+
+for p in "${PATHS[@]}"; do
+  echo "-- syncing $p"
+  sudo mkdir -p "$p"
+  sudo rsync "${RSYNC_OPTS[@]}" "$SOURCE:$p/" "$p/"
+done
+
+if [[ $APPLY -eq 1 ]]; then
+  echo "-- dumping database on source"
+  ssh -i "$KEY" "$SOURCE" \
+    "sudo mysqldump --single-transaction --routines --triggers --events --all-databases | gzip" &gt; "$DB_DUMP"
+  echo "-- restoring database"
+  gunzip -c "$DB_DUMP" | sudo mysql
+  echo "-- restarting services"
+  sudo systemctl restart nginx
+  curl -fsS http://localhost/health &amp;&amp; echo "health OK"
+else
+  echo "Dry run complete. Re-run with --apply to copy for real."
+fi
+echo "== done, log: $LOG =="</code></pre>
+<pre><code>chmod +x migrate.sh
+./migrate.sh --source ubuntu@10.0.0.5            # rehearsal
+./migrate.sh --source ubuntu@10.0.0.5 --apply</code></pre>
+<p>Schedule an incremental sync before cutover day, so the final delta is small:</p>
+<pre><code>crontab -e
+0 */6 * * * /home/ubuntu/migrate.sh --source ubuntu@10.0.0.5 --apply &gt;&gt; /var/log/migrate-cron.log 2&gt;&amp;1</code></pre>
+<div class="note">The cron entry above re-imports the database every run. Use it for file sync only, and keep the database step manual or drop the <code>--apply</code> DB part for scheduled runs.</div>
+
+<h2 id="ansible">Automation with Ansible</h2>
+<p>Use Ansible to build the target identically each time, then rsync the data. See <a href="ansible.html">Ansible basics</a>.</p>
+<pre data-file="target-setup.yml"><code>---
+- name: Prepare migration target
+  hosts: target
+  become: true
+  vars:
+    app_user: deploy
+    app_uid: 1001
+    packages: [nginx, mysql-server, rsync, curl, ufw]
+  tasks:
+    - name: Install packages
+      ansible.builtin.apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+
+    - name: Create group with matching GID
+      ansible.builtin.group:
+        name: "{{ app_user }}"
+        gid: "{{ app_uid }}"
+
+    - name: Create user with matching UID
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        uid: "{{ app_uid }}"
+        group: "{{ app_user }}"
+        shell: /bin/bash
+
+    - name: Sync web root from source
+      ansible.posix.synchronize:
+        src: /var/www/
+        dest: /var/www/
+        mode: pull
+        rsync_opts: ["--numeric-ids"]
+      delegate_to: "{{ inventory_hostname }}"
+
+    - name: Allow SSH and web
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: ["22", "80", "443"]
+
+    - name: Enable firewall
+      community.general.ufw:
+        state: enabled
+
+    - name: Services enabled and started
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop: [nginx, mysql]</code></pre>
+<div class="note">The <code>synchronize</code> pull needs the target to reach the source over SSH. For a one-way copy, running <code>rsync</code> directly (as in the script) is simpler and easier to debug.</div>
+
+<h2 id="rollback">Rollback</h2>
+<ul>
+<li>Point DNS / the load balancer back at the source (low TTL makes this fast).</li>
+<li>Start the application on the source again.</li>
+<li>If writes happened on the target after cutover, dump those changes and apply them back to the source before reopening.</li>
+<li>Keep the source untouched for at least a few days after a successful migration.</li>
+</ul>
+
+<h2 id="checklist">Checklist</h2>
+<ul>
+<li>Backup or snapshot of source taken and restore tested</li>
+<li>Target OS, packages and versions match (or differences are known)</li>
+<li>UIDs/GIDs, cron jobs, systemd units, <code>/etc/hosts</code>, firewall rules copied</li>
+<li>SSL certificates and renewal job moved (Certbot / cert files)</li>
+<li>Environment files and secrets transferred securely</li>
+<li>DNS TTL lowered ahead of time</li>
+<li>Monitoring, log shipping and backups configured on the new host</li>
+<li>Rollback plan written and agreed</li>
+<li>Rehearsal done on UAT with timings recorded</li>
+</ul>
+
+<div class="pager"><a href="docker.html">&larr; Docker</a><a href="../index.html#guides">All guides &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+<script src="guide.js"></script></body></html>

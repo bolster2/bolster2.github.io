@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terraform + GitHub Actions | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css"></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a class="on" href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a></div></nav>
+<main>
+<div class="tag">GUIDE 02</div>
+<h1><span class="grad">Terraform</span> basics + GitHub Actions infra automation</h1>
+<p class="sub">Provision Azure infrastructure as code, keep state remote, and let a pipeline plan on every pull request and apply on merge.</p>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#basics">Core workflow</a></li><li><a href="#files">Project layout and example</a></li><li><a href="#backend">Remote state in Azure Storage</a></li><li><a href="#oidc">Passwordless auth: GitHub OIDC to Azure</a></li><li><a href="#workflow">GitHub Actions workflow</a></li><li><a href="#flow">Branching and approvals</a></li><li><a href="#tips">Best practices</a></li></ol></div>
+
+<h2 id="basics">Core workflow</h2>
+<pre><code>terraform init       # download providers, configure backend
+terraform fmt -check # formatting
+terraform validate   # syntax and internal consistency
+terraform plan -out=tfplan
+terraform apply tfplan
+terraform destroy    # tear down (careful)</code></pre>
+<table><tr><th>Concept</th><th>Meaning</th></tr>
+<tr><td>Provider</td><td>Plugin for a platform (azurerm, aws).</td></tr>
+<tr><td>Resource</td><td>An infrastructure object you create.</td></tr>
+<tr><td>Variable / output</td><td>Inputs and exported values.</td></tr>
+<tr><td>State</td><td>Terraform's record of what exists. Must be shared and locked in teams.</td></tr>
+<tr><td>Module</td><td>Reusable group of resources.</td></tr></table>
+
+<h2 id="files">Project layout and example</h2>
+<pre><code>infra/
+  main.tf
+  variables.tf
+  outputs.tf
+  providers.tf
+  envs/
+    uat.tfvars
+    prod.tfvars</code></pre>
+<pre data-file="providers.tf"><code>terraform {
+  required_version = "&gt;= 1.6"
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~&gt; 3.100"
+    }
+  }
+  backend "azurerm" {}   # values passed at init time
+}
+
+provider "azurerm" {
+  features {}
+  use_oidc = true
+}</code></pre>
+<pre data-file="variables.tf"><code>variable "env" {
+  type = string
+}
+
+variable "location" {
+  type    = string
+  default = "centralindia"
+}</code></pre>
+<pre data-file="main.tf"><code>resource "azurerm_resource_group" "rg" {
+  name     = "rg-demo-${var.env}"
+  location = var.location
+  tags     = { env = var.env, managed_by = "terraform" }
+}
+
+resource "azurerm_container_registry" "acr" {
+  name                = "acrdemo${var.env}001"   # globally unique, lowercase
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  sku                 = "Basic"
+}
+
+resource "azurerm_log_analytics_workspace" "law" {
+  name                = "law-demo-${var.env}"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}</code></pre>
+<pre data-file="envs/uat.tfvars"><code>env = "uat"</code></pre>
+<div class="note ok">The same code gives you UAT and Prod: only the <code>.tfvars</code> file and the state key change.</div>
+
+<h2 id="backend">Remote state in Azure Storage</h2>
+<p>Create the state storage once, manually or with a separate bootstrap config:</p>
+<pre><code>az group create -n rg-tfstate -l centralindia
+az storage account create -n sttfstate12345 -g rg-tfstate -l centralindia --sku Standard_LRS --min-tls-version TLS1_2
+az storage container create --account-name sttfstate12345 -n tfstate --auth-mode login</code></pre>
+<pre><code>terraform init \
+  -backend-config="resource_group_name=rg-tfstate" \
+  -backend-config="storage_account_name=sttfstate12345" \
+  -backend-config="container_name=tfstate" \
+  -backend-config="key=demo-uat.tfstate" \
+  -backend-config="use_oidc=true"</code></pre>
+<p>The azurerm backend takes a blob lease for locking, so two runs cannot write state at once.</p>
+
+<h2 id="oidc">Passwordless auth: GitHub OIDC to Azure</h2>
+<p>No client secret is stored in GitHub. GitHub presents a short-lived token and Azure trusts it.</p>
+<pre><code># 1. App registration + service principal
+az ad app create --display-name gh-terraform
+APP_ID=$(az ad app list --display-name gh-terraform --query "[0].appId" -o tsv)
+az ad sp create --id $APP_ID
+
+# 2. Federated credential for the main branch (repeat for pull_request / environments)
+az ad app federated-credential create --id $APP_ID --parameters '{
+  "name": "gh-main",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:YOUR_USER/YOUR_REPO:ref:refs/heads/main",
+  "audiences": ["api://AzureADTokenExchange"]
+}'
+az ad app federated-credential create --id $APP_ID --parameters '{
+  "name": "gh-pr",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:YOUR_USER/YOUR_REPO:pull_request",
+  "audiences": ["api://AzureADTokenExchange"]
+}'
+
+# 3. Roles: Contributor on the subscription + data access to state storage
+az role assignment create --assignee $APP_ID --role Contributor --scope /subscriptions/SUB_ID
+az role assignment create --assignee $APP_ID --role "Storage Blob Data Contributor" \
+  --scope $(az storage account show -n sttfstate12345 --query id -o tsv)</code></pre>
+<p>Add repository <b>variables</b> (or secrets): <code>AZURE_CLIENT_ID</code>, <code>AZURE_TENANT_ID</code>, <code>AZURE_SUBSCRIPTION_ID</code>. These are identifiers, not passwords.</p>
+<div class="note">If you use a GitHub <code>environment:</code> in the job, the OIDC subject becomes <code>repo:USER/REPO:environment:NAME</code>, so create a federated credential for it too.</div>
+
+<h2 id="workflow">GitHub Actions workflow</h2>
+<pre data-file=".github/workflows/terraform.yml"><code>name: terraform
+on:
+  pull_request:
+    paths: ["infra/**"]
+  push:
+    branches: [main]
+    paths: ["infra/**"]
+
+permissions:
+  id-token: write      # OIDC
+  contents: read
+  pull-requests: write # to comment the plan
+
+env:
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TF_IN_AUTOMATION: "true"
+
+defaults:
+  run:
+    working-directory: infra
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+      - name: Init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=rg-tfstate" \
+            -backend-config="storage_account_name=sttfstate12345" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=demo-uat.tfstate" \
+            -backend-config="use_oidc=true"
+      - run: terraform fmt -check -recursive
+      - run: terraform validate
+      - name: Plan
+        run: terraform plan -input=false -var-file=envs/uat.tfvars -out=tfplan
+      - name: Save plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: infra/tfplan
+
+  apply:
+    needs: plan
+    if: github.ref == 'refs/heads/main' &amp;&amp; github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: uat          # add required reviewers in repo Settings, Environments
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+      - name: Init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=rg-tfstate" \
+            -backend-config="storage_account_name=sttfstate12345" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=demo-uat.tfstate" \
+            -backend-config="use_oidc=true"
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infra
+      - run: terraform apply -input=false tfplan</code></pre>
+<div class="note ok">The job runs the exact plan that was reviewed. This avoids drift between "what I approved" and "what got applied".</div>
+
+<h2 id="flow">Branching and approvals</h2>
+<ol>
+<li>Open a PR that changes <code>infra/</code>. The <code>plan</code> job runs and shows what would change.</li>
+<li>A teammate reviews the plan output in the job log.</li>
+<li>Merge to <code>main</code>. The <code>apply</code> job waits for the <code>uat</code> environment approvers.</li>
+<li>Approve it and the infrastructure is provisioned.</li>
+<li>Repeat for prod with its own state key, tfvars and a stricter environment.</li>
+</ol>
+
+<h2 id="tips">Best practices</h2>
+<ul>
+<li>Never commit <code>*.tfstate</code>, <code>.terraform/</code> or secret tfvars. Add them to <code>.gitignore</code>.</li>
+<li>Pin provider and Terraform versions, and commit <code>.terraform.lock.hcl</code>.</li>
+<li>One state per environment; keep blast radius small.</li>
+<li>Use <code>terraform import</code> or <code>import</code> blocks to adopt existing resources instead of recreating them.</li>
+<li>Scan with <code>tfsec</code>/<code>checkov</code> in the pipeline.</li>
+<li>Add budgets and tags for FinOps visibility on everything you provision.</li>
+</ul>
+
+<div class="pager"><a href="ansible.html">&larr; Ansible</a><a href="kubernetes.html">Kubernetes &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+<script src="guide.js"></script></body></html>

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kubernetes: KIND, Helm, CI/CD | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css"></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a class="on" href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a></div></nav>
+<main>
+<div class="tag">GUIDE 03</div>
+<h1><span class="grad">Kubernetes</span> deployment: KIND + Helm + CI/CD</h1>
+<p class="sub">Run a local cluster with KIND, package an app with Helm, and automate lint, test and deploy with GitHub Actions.</p>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#kind">KIND cluster</a></li><li><a href="#raw">Plain manifest deployment</a></li><li><a href="#helm">Helm chart</a></li><li><a href="#ci">CI: test the chart on KIND in GitHub Actions</a></li><li><a href="#cd">CD: release with Helm</a></li><li><a href="#debug">Troubleshooting cheatsheet</a></li></ol></div>
+
+<h2 id="kind">KIND cluster</h2>
+<p>KIND (Kubernetes IN Docker) runs cluster nodes as containers. Needs Docker, <code>kubectl</code> and <code>kind</code>.</p>
+<pre><code># Linux / WSL
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+chmod +x ./kind &amp;&amp; sudo mv ./kind /usr/local/bin/kind
+# Windows: winget install Kubernetes.kind</code></pre>
+<pre data-file="kind-config.yaml"><code>kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
+  - role: worker
+  - role: worker</code></pre>
+<pre><code>kind create cluster --name dev --config kind-config.yaml
+kubectl cluster-info --context kind-dev
+kubectl get nodes
+
+# load a locally built image into the cluster (no registry needed)
+docker build -t myapp:dev .
+kind load docker-image myapp:dev --name dev
+
+kind delete cluster --name dev</code></pre>
+
+<h2 id="raw">Plain manifest deployment</h2>
+<pre data-file="k8s/app.yaml"><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: myapp }
+  template:
+    metadata:
+      labels: { app: myapp }
+    spec:
+      containers:
+        - name: myapp
+          image: myapp:dev
+          ports: [{ containerPort: 3000 }]
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /health, port: 3000 }
+          livenessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+spec:
+  selector: { app: myapp }
+  ports: [{ port: 80, targetPort: 3000 }]</code></pre>
+<pre><code>kubectl apply -f k8s/app.yaml
+kubectl rollout status deploy/myapp
+kubectl port-forward svc/myapp 8081:80</code></pre>
+
+<h2 id="helm">Helm chart</h2>
+<pre><code>helm create mychart     # scaffold
+mychart/
+  Chart.yaml
+  values.yaml
+  values-uat.yaml  values-prod.yaml    # your overrides
+  templates/
+    deployment.yaml  service.yaml  ingress.yaml  _helpers.tpl</code></pre>
+<pre data-file="mychart/values.yaml"><code>replicaCount: 2
+image:
+  repository: myacr.azurecr.io/myapp
+  tag: "latest"
+  pullPolicy: IfNotPresent
+service:
+  port: 80
+containerPort: 3000
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits:   { cpu: 500m, memory: 256Mi }</code></pre>
+<pre data-file="mychart/templates/deployment.yaml (core part)"><code>spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.containerPort }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}</code></pre>
+<pre><code>helm lint mychart
+helm template mychart -f mychart/values-uat.yaml        # render without installing
+helm upgrade --install myapp mychart -n uat --create-namespace -f mychart/values-uat.yaml --set image.tag=1.4.2 --atomic --wait
+helm history myapp -n uat
+helm rollback myapp 1 -n uat</code></pre>
+<div class="note ok"><code>--atomic</code> rolls back automatically if the release fails. <code>helm upgrade --install</code> is idempotent, so one command serves first install and every update.</div>
+
+<h2 id="ci">CI: test the chart on KIND in GitHub Actions</h2>
+<p>Every PR builds the image, spins up a throwaway KIND cluster inside the runner, installs the chart, and checks it is healthy.</p>
+<pre data-file=".github/workflows/ci.yml"><code>name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint chart
+        run: helm lint mychart
+
+      - name: Build image
+        run: docker build -t myapp:${{ github.sha }} .
+
+      - name: Create KIND cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ci
+
+      - name: Load image into KIND
+        run: kind load docker-image myapp:${{ github.sha }} --name ci
+
+      - name: Install chart
+        run: |
+          helm upgrade --install myapp mychart \
+            --set image.repository=myapp \
+            --set image.tag=${{ github.sha }} \
+            --set image.pullPolicy=Never \
+            --wait --timeout 120s
+
+      - name: Smoke test
+        run: |
+          kubectl rollout status deploy/myapp --timeout=90s
+          kubectl get pods -o wide
+          kubectl port-forward svc/myapp 8081:80 &amp;
+          sleep 3
+          curl -fsS http://localhost:8081/health</code></pre>
+
+<h2 id="cd">CD: release with Helm</h2>
+<p>On merge to <code>main</code>: build and push the image to ACR, then <code>helm upgrade</code> against AKS. Azure login uses OIDC (see the <a href="terraform.html#oidc">Terraform guide</a> for setup).</p>
+<pre data-file=".github/workflows/cd.yml"><code>name: cd
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR: myacr
+  IMAGE: myapp
+  AKS: aks-uat
+  RG: rg-uat
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: uat
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push image
+        run: |
+          az acr login --name $ACR
+          docker build -t $ACR.azurecr.io/$IMAGE:${{ github.sha }} .
+          docker push $ACR.azurecr.io/$IMAGE:${{ github.sha }}
+
+      - uses: azure/aks-set-context@v4
+        with:
+          cluster-name: ${{ env.AKS }}
+          resource-group: ${{ env.RG }}
+
+      - uses: azure/setup-helm@v4
+
+      - name: Deploy
+        run: |
+          helm upgrade --install myapp mychart \
+            -n uat --create-namespace \
+            -f mychart/values-uat.yaml \
+            --set image.repository=$ACR.azurecr.io/$IMAGE \
+            --set image.tag=${{ github.sha }} \
+            --atomic --wait --timeout 5m</code></pre>
+<div class="note">The AKS cluster must be able to pull from ACR: <code>az aks update -n aks-uat -g rg-uat --attach-acr myacr</code>.</div>
+
+<h2 id="debug">Troubleshooting cheatsheet</h2>
+<table><tr><th>Symptom</th><th>Check</th></tr>
+<tr><td>Pod Pending</td><td><code>kubectl describe pod X</code>: resources, taints, PVC</td></tr>
+<tr><td>ImagePullBackOff</td><td>Image name/tag, registry auth, <code>--attach-acr</code>, or KIND needs <code>kind load</code></td></tr>
+<tr><td>CrashLoopBackOff</td><td><code>kubectl logs X --previous</code></td></tr>
+<tr><td>Service unreachable</td><td><code>kubectl get endpoints svc</code>: selectors must match pod labels</td></tr>
+<tr><td>Helm stuck</td><td><code>helm status</code>, <code>helm history</code>, then <code>helm rollback</code></td></tr></table>
+<pre><code>kubectl get events --sort-by=.lastTimestamp
+kubectl top pods
+kubectl exec -it POD -- sh</code></pre>
+
+<div class="pager"><a href="terraform.html">&larr; Terraform</a><a href="aca-aks.html">ACA &amp; AKS &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+<script src="guide.js"></script></body></html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACA and AKS with GitHub Actions | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css"></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a class="on" href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a></div></nav>
+<main>
+<div class="tag">GUIDE 04</div>
+<h1><span class="grad">Azure Container Apps</span> and <span class="grad">AKS</span> with GitHub Actions</h1>
+<p class="sub">Two ways to run containers on Azure, each with a CI/CD pipeline: build, push to ACR, deploy, verify.</p>
+<div class="note ok">You wrote "ACS". Azure Container Service was retired and replaced by <b>AKS (Azure Kubernetes Service)</b>, so this page covers AKS. If you meant something else, tell me and I'll change it.</div>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#choose">ACA or AKS?</a></li><li><a href="#shared">Shared setup: ACR + OIDC login</a></li><li><a href="#aca">ACA: create and pipeline</a></li><li><a href="#aks">AKS: create and pipeline</a></li><li><a href="#ops">Operations: revisions, scaling, rollback</a></li><li><a href="#cost">Cost notes (FinOps)</a></li></ol></div>
+
+<h2 id="choose">ACA or AKS?</h2>
+<table><tr><th></th><th>Azure Container Apps</th><th>AKS</th></tr>
+<tr><td>Model</td><td>Serverless containers, Kubernetes hidden</td><td>Managed Kubernetes, you own workloads</td></tr>
+<tr><td>Scaling</td><td>Built-in, KEDA rules, scale to zero</td><td>HPA, cluster autoscaler, KEDA add-on</td></tr>
+<tr><td>Ops effort</td><td>Low</td><td>Higher (nodes, upgrades, networking)</td></tr>
+<tr><td>Best for</td><td>APIs, web apps, workers, jobs</td><td>Many services, custom operators, full K8s control</td></tr></table>
+
+<h2 id="shared">Shared setup: ACR + OIDC login</h2>
+<pre><code>az group create -n rg-uat -l centralindia
+az acr create -n myacr -g rg-uat --sku Basic</code></pre>
+<p>For the passwordless GitHub-to-Azure login, follow <a href="terraform.html#oidc">the OIDC setup in the Terraform guide</a>. The service principal needs <b>AcrPush</b> on the registry, plus rights on the target (Contributor on the resource group is the simple option).</p>
+<pre><code>az role assignment create --assignee $APP_ID --role AcrPush \
+  --scope $(az acr show -n myacr --query id -o tsv)</code></pre>
+<p>Repository variables: <code>AZURE_CLIENT_ID</code>, <code>AZURE_TENANT_ID</code>, <code>AZURE_SUBSCRIPTION_ID</code>.</p>
+
+<h2 id="aca">ACA: create and pipeline</h2>
+<h3>One-time creation</h3>
+<pre><code>az extension add --name containerapp --upgrade
+az containerapp env create -n cae-uat -g rg-uat -l centralindia
+
+az containerapp create -n myapp -g rg-uat --environment cae-uat \
+  --image myacr.azurecr.io/myapp:latest \
+  --registry-server myacr.azurecr.io --registry-identity system \
+  --target-port 3000 --ingress external \
+  --min-replicas 1 --max-replicas 5 \
+  --cpu 0.5 --memory 1.0Gi</code></pre>
+<p><code>--registry-identity system</code> lets the app pull from ACR through its managed identity, with no registry password. Grant that identity <b>AcrPull</b> if the CLI has not done so.</p>
+<h3>Pipeline</h3>
+<pre data-file=".github/workflows/aca.yml"><code>name: deploy-aca
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR: myacr
+  APP: myapp
+  RG: rg-uat
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: uat
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push
+        run: |
+          az acr login --name $ACR
+          docker build -t $ACR.azurecr.io/$APP:${{ github.sha }} .
+          docker push $ACR.azurecr.io/$APP:${{ github.sha }}
+
+      - name: Deploy new revision
+        run: |
+          az containerapp update -n $APP -g $RG \
+            --image $ACR.azurecr.io/$APP:${{ github.sha }} \
+            --revision-suffix r${{ github.run_number }}
+
+      - name: Smoke test
+        run: |
+          FQDN=$(az containerapp show -n $APP -g $RG --query properties.configuration.ingress.fqdn -o tsv)
+          curl -fsS --retry 5 --retry-delay 5 https://$FQDN/health</code></pre>
+<div class="note ok">Each update creates a new <b>revision</b>. In single-revision mode traffic moves once the new revision is healthy; in multiple-revision mode you can split traffic for canary releases.</div>
+
+<h2 id="aks">AKS: create and pipeline</h2>
+<h3>One-time creation</h3>
+<pre><code>az aks create -n aks-uat -g rg-uat \
+  --node-count 2 --node-vm-size Standard_B2s \
+  --enable-managed-identity --enable-oidc-issuer --enable-workload-identity \
+  --attach-acr myacr --generate-ssh-keys
+
+az aks get-credentials -n aks-uat -g rg-uat</code></pre>
+<p>To let the pipeline run <code>kubectl</code>/<code>helm</code>, give the service principal <b>Azure Kubernetes Service Cluster User Role</b> plus RBAC rights inside the cluster (for example <b>Azure Kubernetes Service RBAC Writer</b> when Azure RBAC for Kubernetes is enabled).</p>
+<h3>Pipeline (plain manifests)</h3>
+<pre data-file=".github/workflows/aks.yml"><code>name: deploy-aks
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR: myacr
+  APP: myapp
+  AKS: aks-uat
+  RG: rg-uat
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: uat
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push
+        run: |
+          az acr login --name $ACR
+          docker build -t $ACR.azurecr.io/$APP:${{ github.sha }} .
+          docker push $ACR.azurecr.io/$APP:${{ github.sha }}
+
+      - uses: azure/aks-set-context@v4
+        with:
+          cluster-name: ${{ env.AKS }}
+          resource-group: ${{ env.RG }}
+
+      - name: Deploy manifests
+        uses: azure/k8s-deploy@v5
+        with:
+          namespace: uat
+          manifests: k8s/app.yaml
+          images: ${{ env.ACR }}.azurecr.io/${{ env.APP }}:${{ github.sha }}
+          strategy: basic</code></pre>
+<p>For Helm instead of raw manifests, use the <code>helm upgrade --install ... --atomic</code> job from the <a href="kubernetes.html#cd">Kubernetes guide</a>.</p>
+
+<h2 id="ops">Operations: revisions, scaling, rollback</h2>
+<h3>ACA</h3>
+<pre><code>az containerapp revision list -n myapp -g rg-uat -o table
+az containerapp revision activate   -n myapp -g rg-uat --revision myapp--r12
+az containerapp ingress traffic set -n myapp -g rg-uat --revision-weight myapp--r12=100
+az containerapp logs show -n myapp -g rg-uat --follow
+
+# HTTP scale rule
+az containerapp update -n myapp -g rg-uat --min-replicas 1 --max-replicas 10 \
+  --scale-rule-name http --scale-rule-type http --scale-rule-http-concurrency 50
+
+# env vars / secrets
+az containerapp secret set -n myapp -g rg-uat --secrets db-pass=VALUE
+az containerapp update -n myapp -g rg-uat --set-env-vars DB_PASS=secretref:db-pass</code></pre>
+<h3>AKS</h3>
+<pre><code>kubectl rollout undo deploy/myapp -n uat
+kubectl autoscale deploy myapp -n uat --min=2 --max=10 --cpu-percent=70
+az aks scale -n aks-uat -g rg-uat --node-count 3
+az aks nodepool update -n aks-uat -g rg-uat --name nodepool1 --enable-cluster-autoscaler --min-count 2 --max-count 5</code></pre>
+
+<h2 id="cost">Cost notes (FinOps)</h2>
+<ul>
+<li>ACA: set <code>min-replicas 0</code> on non-prod apps so idle ones cost close to nothing.</li>
+<li>AKS: use the cluster autoscaler, right-size node SKUs from real CPU/memory usage, and stop UAT clusters out of hours with <code>az aks stop</code> / <code>az aks start</code>.</li>
+<li>Set resource <code>requests</code> from observed usage. Over-requesting is the most common source of idle spend.</li>
+<li>Tag resources (<code>env</code>, <code>owner</code>, <code>app</code>) and use Cost Management budgets with alerts.</li>
+</ul>
+
+<div class="pager"><a href="kubernetes.html">&larr; Kubernetes</a><a href="docker.html">Docker basics &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+<script src="guide.js"></script></body></html>
