@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Himansu Kumar Behera | Cloud DevOps Engineer</title>
+<meta name="description" content="Cloud DevOps Engineer with 5+ years in Azure, AWS, Kubernetes, CI/CD and healthcare IT operations.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#070b16;--bg2:#0d1426;--card:rgba(255,255,255,.04);--bd:rgba(255,255,255,.09);--tx:#e7ecf7;--mut:#8b97b3;--a:#4cc9f0;--b:#7c5cff;--c:#f72585}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tx);line-height:1.6;overflow-x:hidden}
+#bg{position:fixed;inset:0;z-index:-1}
+a{color:inherit;text-decoration:none}
+.grad{background:linear-gradient(90deg,var(--a),var(--b),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200% auto;animation:shift 6s linear infinite}
+@keyframes shift{to{background-position:200% center}}
+nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;justify-content:space-between;align-items:center;padding:14px 5vw;backdrop-filter:blur(14px);background:rgba(7,11,22,.6);border-bottom:1px solid var(--bd)}
+nav .logo{font-weight:800;font-family:'JetBrains Mono',monospace}
+nav ul{display:flex;gap:26px;list-style:none;font-size:.9rem;color:var(--mut)}
+nav ul a:hover{color:var(--a)}
+#prog{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--a),var(--b),var(--c));z-index:60}
+section{padding:110px 5vw 40px;max-width:1150px;margin:auto}
+h2{font-size:clamp(1.8rem,4vw,2.6rem);font-weight:800;margin-bottom:34px}
+h2 small{display:block;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--a);font-weight:500;letter-spacing:.15em;margin-bottom:6px}
+#hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding-top:90px}
+.hi{font-family:'JetBrains Mono',monospace;color:var(--a)}
+h1{font-size:clamp(2.6rem,8vw,5.4rem);font-weight:800;line-height:1.05;margin:10px 0}
+.role{font-size:clamp(1.2rem,3vw,1.9rem);color:var(--mut);min-height:2.4rem;font-family:'JetBrains Mono',monospace}
+.cursor{display:inline-block;width:3px;height:1.1em;background:var(--a);vertical-align:-3px;margin-left:3px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.lead{max-width:640px;margin:22px 0 30px;color:var(--mut)}
+.btns{display:flex;gap:14px;flex-wrap:wrap}
+.btn{padding:13px 26px;border-radius:999px;font-weight:600;border:1px solid var(--bd);transition:.3s}
+.btn.p{background:linear-gradient(90deg,var(--a),var(--b));color:#fff;border:0;box-shadow:0 8px 30px rgba(124,92,255,.35)}
+.btn:hover{transform:translateY(-3px);border-color:var(--a)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-top:60px}
+.stat{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:22px;text-align:center}
+.stat b{display:block;font-size:2.2rem;font-weight:800}
+.stat span{color:var(--mut);font-size:.85rem}
+.reveal{opacity:0;transform:translateY(40px);transition:1s cubic-bezier(.2,.8,.2,1)}
+.reveal.in{opacity:1;transform:none}
+.about p{color:var(--mut);font-size:1.08rem;max-width:850px}
+.chips{display:flex;flex-wrap:wrap;gap:12px}
+.chip{padding:10px 18px;border-radius:12px;background:var(--card);border:1px solid var(--bd);font-size:.92rem;transition:.3s;font-family:'JetBrains Mono',monospace}
+.chip:hover{transform:translateY(-4px) scale(1.05);border-color:var(--b);box-shadow:0 10px 25px rgba(124,92,255,.3);color:var(--a)}
+.skillgrp{margin-bottom:26px}
+.skillgrp h3{font-size:.85rem;letter-spacing:.12em;color:var(--mut);margin-bottom:12px;text-transform:uppercase}
+.tl{position:relative;padding-left:34px}
+.tl:before{content:"";position:absolute;left:8px;top:6px;bottom:0;width:2px;background:linear-gradient(var(--a),var(--b),transparent)}
+.job{position:relative;background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:26px;margin-bottom:28px;transition:.4s}
+.job:hover{border-color:var(--b);transform:translateX(6px);box-shadow:0 15px 45px rgba(0,0,0,.4)}
+.job:before{content:"";position:absolute;left:-34px;top:32px;width:18px;height:18px;border-radius:50%;background:var(--bg);border:3px solid var(--a);box-shadow:0 0 0 0 rgba(76,201,240,.6);animation:pulse 2.2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 14px rgba(76,201,240,0)}100%{box-shadow:0 0 0 0 rgba(76,201,240,0)}}
+.job h3{font-size:1.3rem}
+.job .co{color:var(--a);font-weight:600}
+.job .dt{font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--mut)}
+.job ul{margin:14px 0 0 18px;color:var(--mut);font-size:.95rem}
+.job li{margin-bottom:6px}
+.proj{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-bottom:26px}
+.pc{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:24px;transition:.4s;position:relative;overflow:hidden}
+.pc:hover{transform:translateY(-8px);border-color:var(--c)}
+.pc h4{font-size:1.1rem;margin-bottom:8px}
+.pc p{color:var(--mut);font-size:.9rem}
+.tag{display:inline-block;font-size:.7rem;font-family:'JetBrains Mono',monospace;color:var(--a);margin-bottom:10px}
+.edu{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+.contact{text-align:center;padding-bottom:100px}
+.contact p{color:var(--mut);max-width:520px;margin:0 auto 28px}
+footer{text-align:center;padding:30px;color:var(--mut);font-size:.8rem;border-top:1px solid var(--bd)}
+.tilt{transform-style:preserve-3d;transition:transform .15s}
+@media(max-width:700px){nav ul{display:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div id="prog"></div>
+<canvas id="bg"></canvas>
+<nav><a class="logo grad" href="#hero">&lt;HKB/&gt;</a>
+<ul><li><a href="#about">About</a></li><li><a href="#skills">Skills</a></li><li><a href="#experience">Experience</a></li><li><a href="#projects">Projects</a></li><li><a href="#education">Education</a></li><li><a href="#contact">Contact</a></li></ul></nav>
+
+<section id="hero">
+<div class="hi">$ whoami</div>
+<h1>Himansu Kumar<br><span class="grad">Behera</span></h1>
+<div class="role"><span id="type"></span><span class="cursor"></span></div>
+<p class="lead">5+ years running secure, scalable healthcare platforms on Azure and AWS. I ship containers, automate pipelines and keep production calm.</p>
+<div class="btns"><a class="btn p" href="#contact">Get in touch</a><a class="btn" href="#experience">View experience</a></div>
+<div class="stats">
+<div class="stat"><b data-n="5" data-s="+">0</b><span>Years experience</span></div>
+<div class="stat"><b data-n="3" data-s="">0</b><span>Healthcare platforms owned</span></div>
+<div class="stat"><b data-n="100" data-s="+">0</b><span>Systems run for CBT exams</span></div>
+<div class="stat"><b data-n="15" data-s="%">0</b><span>Azure spend cut (12-15%)</span></div>
+</div>
+</section>
+
+<section id="about" class="about reveal">
+<h2><small>01 / ABOUT</small>Professional <span class="grad">summary</span></h2>
+<p>Cloud and DevOps professional with 5+ years of experience in AWS, Microsoft Azure, Linux administration, CI/CD automation and release management, with hands-on experience running Healthcare HMIS applications across Production and UAT environments. Proficient in Docker, Kubernetes, Jenkins, GitHub Actions, Terraform, Ansible and Bash scripting, with expertise in cloud infrastructure, application deployments, database administration, observability, security and troubleshooting. Focused on delivering secure, scalable and reliable healthcare IT operations.</p>
+</section>
+
+<section id="skills" class="reveal">
+<h2><small>02 / SKILLS</small>Tech <span class="grad">toolbox</span></h2>
+<div class="skillgrp"><h3>Cloud</h3><div class="chips"><span class="chip">Azure AKS</span><span class="chip">Azure Container Apps</span><span class="chip">ACR</span><span class="chip">Front Door</span><span class="chip">App Gateway</span><span class="chip">AWS EC2</span><span class="chip">ELB</span><span class="chip">Route 53</span><span class="chip">VPC</span><span class="chip">IAM</span></div></div>
+<div class="skillgrp"><h3>CI/CD &amp; Automation</h3><div class="chips"><span class="chip">Jenkins</span><span class="chip">GitHub Actions</span><span class="chip">Terraform</span><span class="chip">Ansible</span><span class="chip">Bash</span><span class="chip">Git / SVN</span><span class="chip">Release Management</span></div></div>
+<div class="skillgrp"><h3>Containers &amp; Observability</h3><div class="chips"><span class="chip">Docker</span><span class="chip">Kubernetes</span><span class="chip">Grafana</span><span class="chip">Prometheus</span></div></div>
+<div class="skillgrp"><h3>Systems, Data &amp; Network</h3><div class="chips"><span class="chip">Linux Administration</span><span class="chip">MySQL</span><span class="chip">PostgreSQL</span><span class="chip">DNS</span><span class="chip">SSL/TLS</span></div></div>
+</section>
+
+<section id="experience">
+<h2 class="reveal"><small>03 / EXPERIENCE</small>Where I've <span class="grad">worked</span></h2>
+<div class="tl">
+<div class="job reveal"><h3>DevOps Engineer</h3><div class="co">TatvaCare, Bengaluru</div><div class="dt">Feb 2026 - Present</div>
+<ul>
+<li>Own Production and UAT releases on Microsoft Azure for three healthcare platforms: TatvaPractice, GoodFlip and Evalus AI.</li>
+<li>Optimized Azure spend, reducing the monthly cloud bill by 12-15%.</li>
+<li>Deploy containerized workloads on Azure Container Apps with images in ACR, served through Azure Front Door/CDN, Application Gateway and Blob Storage.</li>
+<li>Configure Azure networking, environment settings, container revisions, scaling rules and Azure RBAC access.</li>
+<li>Build CI/CD pipelines in GitHub Actions and Jenkins for automated build and deployment.</li>
+<li>Set up an AKS cluster and deployed multiple containerized services, managing deployments, services and scaling.</li>
+<li>Track application performance, resource utilization and logs to detect and resolve production issues early.</li>
+<li>Automate database backups and maintenance with Bash and Cron; administer DNS and SSL/TLS certificates.</li>
+<li>Handle L2 incidents across application, database, networking and deployment layers.</li>
+<li>Provision infrastructure with Terraform and Ansible; maintain the AWS footprint (EC2, Route 53, ALB, CloudWatch).</li>
+</ul></div>
+<div class="job reveal"><h3>Release Manager</h3><div class="co">CareTech Innovation, Bengaluru - Client: KIMS Hospital (HMIS)</div><div class="dt">Feb 2025 - Feb 2026</div>
+<ul>
+<li>Led Production and UAT releases of the KIMS Hospital HMIS across Node.js, React, PHP and Java/Maven applications.</li>
+<li>Planned release schedules, validated builds in UAT and coordinated go-live with developers and the client.</li>
+<li>Ran the HMIS AWS environment: EC2, IAM, VPC, Route 53, ELB/ALB, EBS, Auto Scaling and CloudWatch.</li>
+<li>Reduced AWS costs through usage reviews, capacity planning and removal of unused resources.</li>
+<li>Designed Jenkins CI/CD pipelines integrated with Git and SVN.</li>
+<li>Set up Grafana and Prometheus dashboards for infrastructure and application health.</li>
+<li>Secured servers with IAM roles, SSL/TLS and access controls; automated backups with Bash and Cron.</li>
+<li>Resolved L2 application, database and network issues in Production and UAT.</li>
+</ul></div>
+<div class="job reveal"><h3>Sr. System Administrator</h3><div class="co">Silicon TechLab Pvt Ltd, Bhubaneswar</div><div class="dt">Sep 2021 - Feb 2025</div>
+<ul>
+<li>Administered Linux servers (Ubuntu, RHEL, CentOS, Fedora) across AWS and on-premises Production and UAT.</li>
+<li>Delivered infrastructure for 10+ OSDC/NIC government projects, including the World Bank-funded SALT program.</li>
+<li>Ran 100+ systems for CBT exam infrastructure and set up IT for 10,000+ candidates in the Jail Warder Examination.</li>
+<li>Deployed PHP, Java, Node.js and React apps with Docker; ran Node.js services under PM2.</li>
+<li>Built Jenkins pipelines for automated deployments from version control.</li>
+<li>Administered MySQL, PostgreSQL and MariaDB: operations, backups and troubleshooting.</li>
+<li>Configured DNS, firewalls, SSL/TLS, VPC connectivity and VPN/remote access for OSDC/NIC infrastructure.</li>
+<li>Wrote Bash scripts and Cron jobs for server housekeeping, with Grafana/Prometheus for visibility.</li>
+</ul></div>
+</div>
+</section>
+
+<section id="projects" class="reveal">
+<h2><small>04 / PLATFORMS</small>Products I <span class="grad">keep running</span></h2>
+<div class="proj">
+<div class="pc tilt"><span class="tag">EMR - ABDM CERTIFIED</span><h4>TatvaPractice</h4><p>AI-powered EMR platform that simplifies practice management for doctors and hospitals.</p></div>
+<div class="pc tilt"><span class="tag">DIGITAL THERAPEUTICS</span><h4>GoodFlip (formerly MyTatva)</h4><p>Helps patients with PCOS, Fatty Liver, Diabetes and Obesity through lifestyle coaching, habit tracking and adherence tools.</p></div>
+<div class="pc tilt"><span class="tag">REAL-WORLD EVIDENCE</span><h4>Evalus AI</h4><p>Platform for pharma, biotech and medical device companies to run late-phase studies with speed, structure and compliance.</p></div>
+</div>
+</section>
+
+<section id="education" class="reveal">
+<h2><small>05 / EDUCATION</small>Learning <span class="grad">&amp; languages</span></h2>
+<div class="edu">
+<div class="pc tilt"><span class="tag">Dec 2018</span><h4>M.Sc. Information Technology</h4><p>Centurion University of Technology and Management, Bhubaneswar</p></div>
+<div class="pc tilt"><span class="tag">Dec 2016</span><h4>B.Sc. IT</h4><p>Centurion University of Technology and Management, Bhubaneswar</p></div>
+<div class="pc tilt"><span class="tag">LANGUAGES</span><h4>English, Hindi, Odia</h4><p>Comfortable working across teams and clients.</p></div>
+</div>
+</section>
+
+<section id="contact" class="contact reveal">
+<h2><small>06 / CONTACT</small>Let's <span class="grad">talk</span></h2>
+<p>Looking for reliable cloud operations, smoother releases or lower cloud bills? Reach out.</p>
+<div class="btns" style="justify-content:center">
+<a class="btn p" href="mailto:himansukumarbehera95@gmail.com">Email me</a>
+<a class="btn" href="https://linkedin.com/in/himansu-kumar-behera" target="_blank" rel="noopener">LinkedIn</a>
+<a class="btn" href="tel:+917008935153">+91 70089 35153</a>
+</div>
+<p style="margin-top:22px">Bengaluru, India</p>
+</section>
+<footer>&copy; 2026 Himansu Kumar Behera</footer>
+
+<script>
+// typing effect
+const roles=["Cloud DevOps Engineer","Azure & AWS Specialist","Kubernetes & Docker","CI/CD Automation","Release Manager"];
+let ri=0,ci=0,del=false;const t=document.getElementById('type');
+(function tick(){const w=roles[ri];t.textContent=w.slice(0,ci);
+ if(!del&&ci<w.length){ci++;setTimeout(tick,70)}
+ else if(!del){del=true;setTimeout(tick,1400)}
+ else if(ci>0){ci--;setTimeout(tick,35)}
+ else{del=false;ri=(ri+1)%roles.length;setTimeout(tick,300)}})();
+// scroll progress
+const prog=document.getElementById('prog');
+addEventListener('scroll',()=>{const h=document.documentElement;prog.style.width=(h.scrollTop/(h.scrollHeight-h.clientHeight)*100)+'%'});
+// reveal + counters
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+document.querySelectorAll('[data-n]').forEach(el=>{const n=+el.dataset.n,s=el.dataset.s||'';let v=0;const step=Math.max(1,n/60);
+ const id=setInterval(()=>{v+=step;if(v>=n){v=n;clearInterval(id)}el.textContent=Math.round(v)+s},30)});
+// card tilt
+document.querySelectorAll('.tilt').forEach(c=>{
+ c.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;
+  c.style.transform=`perspective(700px) rotateY(${x*12}deg) rotateX(${-y*12}deg) translateY(-6px)`});
+ c.addEventListener('mouseleave',()=>c.style.transform='')});
+// particle network background
+const cv=document.getElementById('bg'),cx=cv.getContext('2d');let W,H,P=[],m={x:-999,y:-999};
+function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight;P=Array.from({length:Math.min(90,Math.floor(W*H/16000))},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.5}))}
+rs();addEventListener('resize',rs);addEventListener('mousemove',e=>{m.x=e.clientX;m.y=e.clientY});
+(function draw(){cx.clearRect(0,0,W,H);
+ const g=cx.createRadialGradient(W*.2,H*.1,0,W*.2,H*.1,W*.7);g.addColorStop(0,'rgba(124,92,255,.18)');g.addColorStop(1,'transparent');cx.fillStyle=g;cx.fillRect(0,0,W,H);
+ P.forEach((p,i)=>{p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;
+  cx.beginPath();cx.arc(p.x,p.y,1.6,0,6.3);cx.fillStyle='rgba(76,201,240,.8)';cx.fill();
+  for(let j=i+1;j<P.length;j++){const q=P[j],d=Math.hypot(p.x-q.x,p.y-q.y);if(d<130){cx.strokeStyle=`rgba(124,92,255,${.25*(1-d/130)})`;cx.beginPath();cx.moveTo(p.x,p.y);cx.lineTo(q.x,q.y);cx.stroke()}}
+  const dm=Math.hypot(p.x-m.x,p.y-m.y);if(dm<160){cx.strokeStyle=`rgba(247,37,133,${.5*(1-dm/160)})`;cx.beginPath();cx.moveTo(p.x,p.y);cx.lineTo(m.x,m.y);cx.stroke()}});
+ requestAnimationFrame(draw)})();
+</script>
+</body>
+</html>
