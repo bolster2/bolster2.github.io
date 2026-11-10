@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HPA vs VPA: Animated | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css">
+<style>
+.lab{display:grid;gap:18px}
+.ctl{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.ctl .lbl{font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.12em;color:var(--mut)}
+.modes{display:flex;gap:8px;flex-wrap:wrap}
+.mbtn{background:rgba(255,255,255,.05);color:var(--tx);border:1px solid var(--bd);border-radius:999px;padding:7px 16px;font:600 .8rem Inter,sans-serif;cursor:pointer;transition:.25s}
+.mbtn:hover{border-color:var(--a)}
+.mbtn.on{background:linear-gradient(90deg,var(--a),var(--b));border-color:transparent;color:#fff}
+.slider{flex:1;min-width:180px;display:flex;align-items:center;gap:12px}
+input[type=range]{flex:1;accent-color:#4cc9f0;height:6px}
+.rps{font-family:'JetBrains Mono',monospace;font-weight:600;min-width:92px;text-align:right}
+.tbar{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;flex-basis:100%}
+.tbar u{display:block;height:100%;width:0;background:linear-gradient(90deg,#2de2a6,#4cc9f0,#f72585);transition:width .3s}
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.panel{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:20px;position:relative;overflow:hidden}
+.panel.h{box-shadow:inset 0 0 0 1px rgba(76,201,240,.12)}
+.panel.v{box-shadow:inset 0 0 0 1px rgba(255,140,66,.14)}
+.ph{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
+.ph h3{font-size:2rem;margin:0;font-weight:800}
+.panel.h h3{color:#4cc9f0}.panel.v h3{color:#ff8c42}
+.chg{font-family:'JetBrains Mono',monospace;font-size:.62rem;letter-spacing:.1em;padding:4px 9px;border:1px solid;border-radius:6px}
+.panel.h .chg{color:#4cc9f0;border-color:rgba(76,201,240,.5)}
+.panel.v .chg{color:#ff8c42;border-color:rgba(255,140,66,.5)}
+.psub{font-size:.78rem;color:var(--mut);margin-bottom:6px}
+.users{display:flex;justify-content:center;align-items:center;gap:6px;color:var(--mut);font:500 .65rem 'JetBrains Mono',monospace;letter-spacing:.12em;margin:6px 0}
+.pool{position:relative;height:230px;border:1px dashed rgba(255,255,255,.14);border-radius:14px;background:rgba(255,255,255,.02);display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding:14px;align-content:center}
+.pool .pl{position:absolute;top:6px;left:10px;font:500 .58rem 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--mut)}
+canvas.fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.pod{position:relative;z-index:1;width:70px;height:78px;border-radius:12px;border:2px solid #2de2a6;background:rgba(7,11,22,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;transition:width .6s cubic-bezier(.3,1.4,.5,1),height .6s cubic-bezier(.3,1.4,.5,1),border-color .4s,opacity .4s,transform .4s;animation:pin .5s cubic-bezier(.3,1.5,.5,1)}
+@keyframes pin{from{transform:scale(.2);opacity:0}}
+.pod.out{transform:scale(.2);opacity:0}
+.pod b{font-size:1.15rem;font-weight:800;line-height:1}
+.pod i{display:block;width:70%;height:5px;border-radius:9px;background:rgba(255,255,255,.12);overflow:hidden}
+.pod u{display:block;height:100%;background:#2de2a6;transition:width .4s,background .4s}
+.pod span{font:500 .58rem 'JetBrains Mono',monospace;color:var(--mut)}
+.pod.amber{border-color:#ffb703}.pod.amber u{background:#ffb703}
+.pod.red{border-color:#f72585}.pod.red u{background:#f72585}
+.pod.restart{border-color:#8b97b3;opacity:.55;animation:blinkp .6s steps(2) infinite}
+@keyframes blinkp{50%{opacity:.25}}
+.pod.restart b{font-size:.8rem}
+.cnt{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;font-size:1.05rem;font-weight:800}
+.cnt small{font:500 .7rem 'JetBrains Mono',monospace;color:var(--mut)}
+.ev{margin-top:10px;background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;font:500 .72rem 'JetBrains Mono',monospace;color:#b9c3dc;min-height:40px;transition:.3s}
+.ev em{font-style:normal;color:var(--mut)}
+.ev.flash{border-color:var(--a);background:rgba(76,201,240,.08)}
+.panel.v .ev.flash{border-color:#ff8c42;background:rgba(255,140,66,.08)}
+.badge{margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;border-radius:10px;padding:9px 12px;font-size:.8rem;font-weight:700}
+.badge small{font:500 .6rem 'JetBrains Mono',monospace;color:var(--mut)}
+.panel.h .badge{border:1px solid rgba(76,201,240,.35);color:#4cc9f0;background:rgba(76,201,240,.06)}
+.panel.v .badge{border:1px solid rgba(255,140,66,.4);color:#ff8c42;background:rgba(255,140,66,.06)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0}
+.ic{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px}
+.ic .k{font:600 .62rem 'JetBrains Mono',monospace;letter-spacing:.12em;margin-bottom:8px}
+.ic h4{font-size:1rem;margin-bottom:6px}
+.ic p{font-size:.86rem;margin-bottom:8px}
+.ic .f{font:500 .7rem 'JetBrains Mono',monospace;color:var(--mut)}
+.ic.h{border-color:rgba(76,201,240,.35)}.ic.h .k{color:#4cc9f0}
+.ic.v{border-color:rgba(255,140,66,.4)}.ic.v .k{color:#ff8c42}
+.ic.w{border-color:rgba(247,37,133,.4)}.ic.w .k{color:#f72585}
+.pause{margin-left:auto}
+@media(max-width:760px){.panels,.cards{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.pod{animation:none}}
+</style></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a><a href="cicd.html">CI/CD</a><a class="on" href="autoscaling.html">Autoscaling</a></div></nav>
+<main>
+<div class="tag">GUIDE 08 &middot; INTERACTIVE</div>
+<h1>More Pods, or a <span class="grad">bigger Pod?</span></h1>
+<p class="sub">HPA vs VPA, animated. Same users, same traffic spike, two very different reactions. Drag the slider or press a button and watch each autoscaler respond.</p>
+
+<div class="lab">
+ <div class="ctl">
+  <span class="lbl">TRAFFIC</span>
+  <div class="modes" id="modes">
+   <button class="mbtn on" data-load="120">Normal</button>
+   <button class="mbtn" data-load="650">Spike</button>
+   <button class="mbtn" data-load="40">Quiet</button>
+   <button class="mbtn" id="auto">&#9654; Auto demo</button>
+  </div>
+  <div class="slider"><input id="slider" type="range" min="20" max="900" value="120" aria-label="Traffic in requests per second"><span class="rps" id="rps">120 req/s</span></div>
+  <div class="tbar"><u id="tbar"></u></div>
+ </div>
+
+ <div class="panels">
+  <div class="panel h">
+   <div class="ph"><h3>HPA</h3><span class="chg">CHANGES REPLICAS</span></div>
+   <div class="psub">Horizontal Pod Autoscaler &middot; scale out / in</div>
+   <div class="users"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c2.9.2 5 2.3 5 5.3"/></svg> USERS</div>
+   <div class="pool" id="poolH"><span class="pl">NODE POOL</span><canvas class="fx" id="fxH"></canvas></div>
+   <div class="cnt"><span id="hCount">2 replicas</span><small>target CPU 70%</small></div>
+   <div class="ev" id="hEv"><em>EVENT</em> &middot; steady state</div>
+   <div class="badge">&harr; More Pods <small>running Pods untouched</small></div>
+  </div>
+
+  <div class="panel v">
+   <div class="ph"><h3>VPA</h3><span class="chg">CHANGES REQUESTS</span></div>
+   <div class="psub">Vertical Pod Autoscaler &middot; scale up / down</div>
+   <div class="users"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c2.9.2 5 2.3 5 5.3"/></svg> USERS</div>
+   <div class="pool" id="poolV"><span class="pl">NODE POOL</span><canvas class="fx" id="fxV"></canvas></div>
+   <div class="cnt"><span id="vCount">2 &times; size S</span><small id="vReq">requests: 250m</small></div>
+   <div class="ev" id="vEv"><em>EVENT</em> &middot; steady state</div>
+   <div class="badge">&updownarrow; Bigger Pod <small>Recreate mode evicts</small></div>
+  </div>
+ </div>
+</div>
+<p style="font-size:.78rem;color:var(--mut);margin-top:8px">Time is compressed and the numbers are illustrative. Real autoscalers react over seconds to minutes.</p>
+
+<h2>So which one?</h2>
+<div class="cards">
+ <div class="ic h"><div class="k">PICK HPA</div><h4>Stateless, scales with load</h4><p>APIs and workers where another replica means more capacity.</p><div class="f">cpu &middot; memory &middot; custom metrics</div></div>
+ <div class="ic v"><div class="k">PICK VPA</div><h4>Hard to scale out</h4><p>Singletons and workloads whose requests are a guess today.</p><div class="f">start with updateMode: "Off"</div></div>
+ <div class="ic w"><div class="k">CAREFUL</div><h4>Both on CPU or memory?</h4><p>They fight over the same signal. Split them, or let VPA only recommend.</p><div class="f">one metric &middot; one autoscaler</div></div>
+</div>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#how">What you just watched</a></li><li><a href="#hpa">HPA in practice</a></li><li><a href="#vpa">VPA in practice</a></li><li><a href="#nodes">Pods are not enough: the node layer</a></li><li><a href="#table">Side by side</a></li></ol></div>
+
+<h2 id="how">What you just watched</h2>
+<ul>
+<li><b>HPA</b> looks at average CPU across pods. When it passes the target (70% here), it adds replicas. Quiet traffic removes them again, but slowly, using a <b>stabilization window</b> so it does not flap.</li>
+<li><b>VPA</b> keeps the replica count and changes the <b>resource requests</b> of each pod. In the classic mode it must <b>evict and recreate</b> a pod to apply new numbers. That is the grey blinking pod: while it restarts, the other pod carries extra load.</li>
+<li>HPA never touches running pods. VPA does, so give services enough replicas that one restart is safe.</li></ul>
+
+<h2 id="hpa">HPA in practice</h2>
+<p>HPA needs the <b>metrics-server</b> (AKS and most managed clusters ship it) and CPU <b>requests</b> on your containers, because utilization is measured against the request.</p>
+<pre data-file="hpa.yaml"><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: myapp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: myapp
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # wait 5 min before removing pods
+    scaleUp:
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60</code></pre>
+<pre><code>kubectl autoscale deployment myapp --cpu-percent=70 --min=2 --max=8   # quick version
+kubectl get hpa -w
+kubectl describe hpa myapp          # shows current vs target and scaling events
+kubectl top pods</code></pre>
+<div class="note ok">The replica count HPA wants is roughly <code>ceil(currentReplicas &times; currentCPU / targetCPU)</code>. In the demo, 2 pods at 140% against a 70% target asks for 4.</div>
+
+<h2 id="vpa">VPA in practice</h2>
+<p>VPA is an add-on: install its components first (it is not built into every cluster). Start in recommendation-only mode, read the advice, and only then let it act.</p>
+<pre data-file="vpa.yaml"><code>apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: myapp
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: myapp
+  updatePolicy:
+    updateMode: "Off"          # "Off" = recommend only, "Auto" = apply by recreating pods
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        minAllowed: { cpu: 100m, memory: 128Mi }
+        maxAllowed: { cpu: "2", memory: 2Gi }</code></pre>
+<pre><code>kubectl describe vpa myapp          # Recommendation: lower bound, target, upper bound
+kubectl get vpa myapp -o jsonpath='{.status.recommendation.containerRecommendations}'</code></pre>
+<div class="note">Using VPA in <code>Off</code> mode is a safe way to <b>right-size requests</b> from real usage, which also cuts cloud cost. Newer Kubernetes versions add options to resize some resources without recreating the pod. Check what your version and VPA release support before relying on it.</div>
+
+<h2 id="nodes">Pods are not enough: the node layer</h2>
+<p>HPA adds pods, but pods still need room on a node. If the nodes are full, new pods sit in <code>Pending</code> until the <b>Cluster Autoscaler</b> (or AKS node-pool autoscaling) adds a node.</p>
+<pre><code># AKS: let the node pool grow and shrink
+az aks nodepool update -g rg-uat --cluster-name aks-uat -n nodepool1 \
+  --enable-cluster-autoscaler --min-count 2 --max-count 6</code></pre>
+<p>The full chain on a traffic spike: <b>load rises &rarr; HPA adds pods &rarr; nodes fill up &rarr; Cluster Autoscaler adds nodes &rarr; pods schedule</b>. See the <a href="kubernetes.html#debug">troubleshooting section</a> when pods stay Pending.</p>
+
+<h2 id="table">Side by side</h2>
+<table><tr><th></th><th>HPA</th><th>VPA</th></tr>
+<tr><td>Changes</td><td>Number of replicas</td><td>CPU and memory requests (and limits) of each pod</td></tr>
+<tr><td>Running pods</td><td>Untouched</td><td>Usually evicted and recreated to apply changes</td></tr>
+<tr><td>Best for</td><td>Stateless services that scale with traffic</td><td>Workloads that cannot scale out, and request right-sizing</td></tr>
+<tr><td>Signals</td><td>CPU, memory, custom and external metrics</td><td>Historical CPU and memory usage</td></tr>
+<tr><td>Needs</td><td>metrics-server, CPU requests set</td><td>VPA components installed</td></tr>
+<tr><td>Cost effect</td><td>Pay for extra pods only during peaks</td><td>Stops over-requesting, so fewer idle resources</td></tr>
+<tr><td>Combine?</td><td colspan="2">Fine when they use different signals, for example HPA on CPU or custom metrics and VPA in recommendation mode for requests. Do not let both act on the same CPU or memory metric.</td></tr></table>
+
+<div class="pager"><a href="cicd.html">&larr; CI/CD</a><a href="../index.html#guides">All guides &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+
+<script src="guide.js"></script>
+<script>
+(function(){
+const CAP=170, TARGET=70;                 // req/s a 250m pod handles at 100% CPU; HPA target %
+const SIZES=[{n:'250m',m:1,c:'S',px:70},{n:'500m',m:2,c:'M',px:84},{n:'1000m',m:4,c:'L',px:100},{n:'2000m',m:8,c:'XL',px:118}];
+let load=120;
+const $=id=>document.getElementById(id);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- HPA ---------- */
+const poolH=$('poolH'); const hpa={els:[],down:0};
+function mkPod(pool,label){const d=document.createElement('div');d.className='pod';d.innerHTML='<b>0%</b><i><u></u></i><span>'+label+'</span>';pool.appendChild(d);return d}
+function setPod(el,cpu,txt){const c=Math.min(100,Math.round(cpu));el.querySelector('b').textContent=c+'%';el.querySelector('u').style.width=c+'%';el.classList.toggle('amber',cpu>=TARGET&&cpu<90);el.classList.toggle('red',cpu>=90)}
+function addHpa(){hpa.els.push(mkPod(poolH,'pod'))}
+function rmHpa(){const e=hpa.els.pop();if(!e)return;e.classList.add('out');setTimeout(()=>e.remove(),420)}
+addHpa();addHpa();
+
+function say(id,html){const e=$(id);e.innerHTML='<em>EVENT</em> &middot; '+html;e.classList.add('flash');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('flash'),1600)}
+
+function hpaTick(){
+  const n=hpa.els.length, cpu=load/(n*CAP)*100;
+  const desired=Math.max(2,Math.min(8,Math.ceil(load/(CAP*TARGET/100))));
+  if(desired>n){
+    const to=Math.min(desired,n*2); hpa.down=0;
+    for(let i=n;i<to;i++)addHpa();
+    say('hEv','CPU '+Math.round(cpu)+'% &gt; '+TARGET+'%: scale <b>'+n+' &rarr; '+to+'</b> replicas');
+  }else if(desired<n){
+    hpa.down++;
+    if(hpa.down>=4){rmHpa();hpa.down=0;say('hEv','CPU low for a while: scale <b>'+n+' &rarr; '+(n-1)+'</b> (stabilization window passed)')}
+    else say('hEv','CPU '+Math.round(cpu)+'%: want '+desired+' replicas, waiting ('+hpa.down+'/4) before scale-down');
+  }else{hpa.down=0}
+  const m=hpa.els.length, c=load/(m*CAP)*100;
+  hpa.els.forEach(e=>setPod(e,c));
+  $('hCount').textContent=m+(m===1?' replica':' replicas');
+}
+
+/* ---------- VPA ---------- */
+const poolV=$('poolV');
+const vpa={pods:[],busy:false};
+function sizeOf(i){return SIZES[i]}
+function styleVpa(p){const s=sizeOf(p.size);p.el.style.width=s.px+'px';p.el.style.height=(s.px+8)+'px';p.el.querySelector('span').textContent=s.n}
+for(let i=0;i<2;i++){const p={size:0,state:'run',el:mkPod(poolV,'250m')};vpa.pods.push(p);styleVpa(p)}
+
+function vpaCpu(){let cap=0;vpa.pods.forEach(p=>{if(p.state==='run')cap+=CAP*sizeOf(p.size).m});return cap?load/cap*100:999}
+function vpaRender(){
+  const cpu=vpaCpu();
+  vpa.pods.forEach(p=>{
+    if(p.state==='run'){p.el.classList.remove('restart');setPod(p.el,cpu)}
+    else{p.el.classList.add('restart');p.el.querySelector('b').textContent='↻';p.el.querySelector('u').style.width='0%'}
+  });
+  const s=sizeOf(vpa.pods[0].size);
+  $('vCount').innerHTML=vpa.pods.length+' &times; size '+s.c;
+  $('vReq').textContent='requests: '+s.n;
+}
+function wantedSize(){
+  for(let i=0;i<SIZES.length;i++){if(load/(vpa.pods.length*CAP*SIZES[i].m)*100<=TARGET)return i}
+  return SIZES.length-1;
+}
+function vpaTick(){
+  if(vpa.busy){vpaRender();return}
+  const cur=vpa.pods[0].size, want=wantedSize(), cpu=vpaCpu();
+  if((want>cur&&cpu>TARGET+5)||(want<cur&&cpu<40)){
+    vpa.busy=true;
+    say('vEv','recommendation: <b>'+sizeOf(cur).n+' &rarr; '+sizeOf(want).n+'</b>. Evicting pods to apply new requests');
+    resize(want);
+  }else{vpaRender()}
+}
+function resize(to){
+  let i=0;
+  (function next(){
+    if(i>=vpa.pods.length){vpa.busy=false;say('vEv','new requests applied: <b>'+sizeOf(to).n+'</b> per pod');vpaRender();return}
+    const p=vpa.pods[i];
+    p.state='restart';vpaRender();
+    setTimeout(()=>{p.size=to;styleVpa(p);p.state='run';vpaRender();i++;setTimeout(next,reduce?50:500)},reduce?100:1300);
+  })();
+}
+vpaRender();
+
+/* ---------- particles (requests flowing to pods) ---------- */
+function fx(canvasId,pool,getPods,color){
+  const cv=$(canvasId),cx=cv.getContext('2d');let W,H,parts=[],last=performance.now(),acc=0;
+  function size(){const r=pool.getBoundingClientRect();W=cv.width=r.width;H=cv.height=r.height}
+  size();addEventListener('resize',size);
+  (function frame(t){
+    const dt=Math.min(.05,(t-last)/1000);last=t;
+    cx.clearRect(0,0,W,H);
+    if(!reduce){
+      acc+=dt*Math.min(60,load/12);
+      while(acc>=1){acc--;const pods=getPods();if(pods.length){const pr=pool.getBoundingClientRect(),el=pods[(Math.random()*pods.length)|0],r=el.getBoundingClientRect();
+        parts.push({x:W/2+(Math.random()-.5)*60,y:-4,tx:r.left-pr.left+r.width/2+(Math.random()-.5)*20,ty:r.top-pr.top+r.height/2,p:0})}}
+      parts=parts.filter(q=>{q.p+=dt*1.6;if(q.p>=1)return false;
+        const x=q.x+(q.tx-q.x)*q.p,y=q.y+(q.ty-q.y)*q.p;
+        cx.globalAlpha=1-q.p*.4;cx.fillStyle=color;cx.beginPath();cx.arc(x,y,2.4,0,6.3);cx.fill();return true});
+      cx.globalAlpha=1;
+    }
+    requestAnimationFrame(frame)})(last);
+}
+fx('fxH',poolH,()=>hpa.els.filter(e=>!e.classList.contains('out')),'#4cc9f0');
+fx('fxV',poolV,()=>vpa.pods.filter(p=>p.state==='run').map(p=>p.el),'#ff8c42');
+
+/* ---------- controls ---------- */
+const slider=$('slider');
+function setLoad(v,fromSlider){
+  load=+v;$('rps').textContent=load+' req/s';$('tbar').style.width=(load/900*100)+'%';
+  if(!fromSlider)slider.value=load;
+  document.querySelectorAll('#modes .mbtn[data-load]').forEach(b=>b.classList.toggle('on',+b.dataset.load===load));
+}
+slider.addEventListener('input',()=>{stopAuto();setLoad(slider.value,true)});
+document.querySelectorAll('#modes .mbtn[data-load]').forEach(b=>b.addEventListener('click',()=>{stopAuto();setLoad(b.dataset.load)}));
+
+let autoT=null,step=0;const autoBtn=$('auto');
+const seq=[120,650,650,300,60,60,120];
+function runAuto(){autoBtn.classList.add('on');autoBtn.innerHTML='&#10074;&#10074; Pause demo';
+  const go=()=>{setLoad(seq[step%seq.length]);step++};go();autoT=setInterval(go,6000)}
+function stopAuto(){if(autoT){clearInterval(autoT);autoT=null}autoBtn.classList.remove('on');autoBtn.innerHTML='&#9654; Auto demo'}
+autoBtn.addEventListener('click',()=>autoT?stopAuto():runAuto());
+
+setLoad(120);
+setInterval(hpaTick,1000);
+setInterval(vpaTick,1000);
+hpaTick();vpaTick();
+})();
+</script>
+</body></html>
