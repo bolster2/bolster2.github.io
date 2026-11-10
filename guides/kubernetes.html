@@ -11,7 +11,113 @@
 <p class="sub">Run a local cluster with KIND, package an app with Helm, and automate lint, test and deploy with GitHub Actions.</p>
 
 <div class="toc"><b>ON THIS PAGE</b><ol>
-<li><a href="#kind">KIND cluster</a></li><li><a href="#raw">Plain manifest deployment</a></li><li><a href="#helm">Helm chart</a></li><li><a href="#ci">CI: test the chart on KIND in GitHub Actions</a></li><li><a href="#cd">CD: release with Helm</a></li><li><a href="#debug">Troubleshooting cheatsheet</a></li></ol></div>
+<li><a href="#concepts">Fundamental concepts</a></li><li><a href="#kind">KIND cluster</a></li><li><a href="#raw">Plain manifest deployment</a></li><li><a href="#helm">Helm chart</a></li><li><a href="#ci">CI: test the chart on KIND in GitHub Actions</a></li><li><a href="#cd">CD: release with Helm</a></li><li><a href="#debug">Troubleshooting cheatsheet</a></li></ol></div>
+
+<h2 id="concepts">Fundamental concepts</h2>
+<p>The 24 terms to know before anything else, each with a command you will actually use.</p>
+<table>
+<tr><th>#</th><th>Concept</th><th>What it is</th><th>Handy command</th></tr>
+<tr><td>1</td><td><b>Pod</b></td><td>Smallest unit in Kubernetes; wraps one or more containers with shared network and storage.</td><td><code>kubectl get pods -o wide</code></td></tr>
+<tr><td>2</td><td><b>Node</b></td><td>A worker machine that runs pods, managed by the control plane.</td><td><code>kubectl get nodes</code></td></tr>
+<tr><td>3</td><td><b>Cluster</b></td><td>A group of nodes working together as a single Kubernetes system.</td><td><code>kubectl cluster-info</code></td></tr>
+<tr><td>4</td><td><b>Deployment</b></td><td>Manages the desired state of pods and handles rolling updates.</td><td><code>kubectl rollout status deploy/myapp</code></td></tr>
+<tr><td>5</td><td><b>ReplicaSet</b></td><td>Keeps a specific number of identical pods running at all times.</td><td><code>kubectl get rs</code></td></tr>
+<tr><td>6</td><td><b>Service</b></td><td>Provides stable networking to reach a group of pods reliably.</td><td><code>kubectl get svc,endpoints</code></td></tr>
+<tr><td>7</td><td><b>Ingress</b></td><td>Manages external HTTP/S access to services using host and path rules.</td><td><code>kubectl get ingress</code></td></tr>
+<tr><td>8</td><td><b>ConfigMap</b></td><td>Stores non-sensitive configuration separately from container images.</td><td><code>kubectl create configmap app-config --from-literal=LOG_LEVEL=info</code></td></tr>
+<tr><td>9</td><td><b>Secret</b></td><td>Stores sensitive data such as passwords and tokens (base64-encoded; enable encryption at rest).</td><td><code>kubectl create secret generic db --from-literal=password=VALUE</code></td></tr>
+<tr><td>10</td><td><b>Namespace</b></td><td>Logical partition of cluster resources for isolation and organisation.</td><td><code>kubectl get ns</code></td></tr>
+<tr><td>11</td><td><b>Kubelet</b></td><td>Node agent that makes sure the containers described in pods are running.</td><td><code>systemctl status kubelet</code> (on a node)</td></tr>
+<tr><td>12</td><td><b>kubectl</b></td><td>CLI tool to interact with and manage Kubernetes clusters.</td><td><code>kubectl config get-contexts</code></td></tr>
+<tr><td>13</td><td><b>Control Plane</b></td><td>The components that manage the overall cluster state (API server, scheduler, controller manager, etcd).</td><td><code>kubectl get pods -n kube-system</code></td></tr>
+<tr><td>14</td><td><b>Scheduler</b></td><td>Assigns new pods to suitable nodes based on resource needs and policies.</td><td><code>kubectl describe pod X</code> (see Events)</td></tr>
+<tr><td>15</td><td><b>Controller Manager</b></td><td>Runs background controllers to maintain cluster state automatically.</td><td><code>kubectl get pods -n kube-system | grep controller</code></td></tr>
+<tr><td>16</td><td><b>etcd</b></td><td>Distributed key-value store that persists all cluster data. Back it up on self-managed clusters.</td><td><code>etcdctl snapshot save backup.db</code></td></tr>
+<tr><td>17</td><td><b>Taints &amp; Tolerations</b></td><td>Control which pods are allowed to run on specific nodes.</td><td><code>kubectl taint nodes node1 dedicated=db:NoSchedule</code></td></tr>
+<tr><td>18</td><td><b>Labels &amp; Selectors</b></td><td>Used to group and select Kubernetes objects dynamically.</td><td><code>kubectl get pods -l app=myapp</code></td></tr>
+<tr><td>19</td><td><b>Resource Requests &amp; Limits</b></td><td>Define how much CPU and memory a container needs and can use.</td><td><code>kubectl top pods</code></td></tr>
+<tr><td>20</td><td><b>Helm</b></td><td>Kubernetes package manager for deploying and managing applications.</td><td><code>helm upgrade --install myapp ./mychart</code></td></tr>
+<tr><td>21</td><td><b>CRD (Custom Resource Definition)</b></td><td>Lets you define your own Kubernetes resource types.</td><td><code>kubectl get crd</code></td></tr>
+<tr><td>22</td><td><b>Operator</b></td><td>A controller built to automate complex application operations using CRDs.</td><td><code>kubectl get pods -n operators</code></td></tr>
+<tr><td>23</td><td><b>DaemonSet</b></td><td>Runs a pod on every node, or on specific nodes, in the cluster.</td><td><code>kubectl get ds -A</code></td></tr>
+<tr><td>24</td><td><b>Logs &amp; Events</b></td><td>Help you debug and track what is happening inside the cluster.</td><td><code>kubectl logs POD</code> and <code>kubectl get events --sort-by=.lastTimestamp</code></td></tr>
+</table>
+
+<h3>How the pieces fit</h3>
+<pre><code>You (kubectl / Helm)
+      |
+      v
+Control Plane: API server -> etcd (state)
+      |            Scheduler (picks a node) + Controller Manager (keeps desired state)
+      v
+Nodes: kubelet runs Pods
+      |
+Deployment -> ReplicaSet -> Pods  <-- Service (stable IP) <-- Ingress (HTTP/S from outside)
+                              |
+                  ConfigMap / Secret / Requests &amp; Limits</code></pre>
+
+<h3>Small examples</h3>
+<pre data-file="configmap-secret.yaml"><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  LOG_LEVEL: info
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db
+type: Opaque
+stringData:
+  password: change-me      # do not commit real secrets to git
+---
+# use both in a container
+# envFrom:
+#   - configMapRef: { name: app-config }
+# env:
+#   - name: DB_PASSWORD
+#     valueFrom: { secretKeyRef: { name: db, key: password } }</code></pre>
+<pre data-file="ingress.yaml"><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myapp
+                port: { number: 80 }</code></pre>
+<pre data-file="daemonset.yaml (log agent on every node)"><code>apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-agent
+spec:
+  selector:
+    matchLabels: { app: log-agent }
+  template:
+    metadata:
+      labels: { app: log-agent }
+    spec:
+      tolerations:
+        - operator: Exists          # also run on tainted nodes
+      containers:
+        - name: agent
+          image: fluent/fluent-bit:2.2</code></pre>
+<pre><code># taint a node, and the toleration a pod needs to land on it
+kubectl taint nodes node1 dedicated=db:NoSchedule
+# pod spec:
+# tolerations:
+#   - key: dedicated
+#     operator: Equal
+#     value: db
+#     effect: NoSchedule</code></pre>
 
 <h2 id="kind">KIND cluster</h2>
 <p>KIND (Kubernetes IN Docker) runs cluster nodes as containers. Needs Docker, <code>kubectl</code> and <code>kind</code>.</p>
