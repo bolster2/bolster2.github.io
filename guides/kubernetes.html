@@ -11,7 +11,7 @@
 <p class="sub">Run a local cluster with KIND, package an app with Helm, and automate lint, test and deploy with GitHub Actions.</p>
 
 <div class="toc"><b>ON THIS PAGE</b><ol>
-<li><a href="#concepts">Fundamental concepts</a></li><li><a href="#kind">KIND cluster</a></li><li><a href="#raw">Plain manifest deployment</a></li><li><a href="#helm">Helm chart</a></li><li><a href="#ci">CI: test the chart on KIND in GitHub Actions</a></li><li><a href="#cd">CD: release with Helm</a></li><li><a href="#debug">Troubleshooting cheatsheet</a></li></ol></div>
+<li><a href="#concepts">Fundamental concepts</a></li><li><a href="#kind">KIND cluster</a></li><li><a href="#raw">Plain manifest deployment</a></li><li><a href="#helm">Helm chart</a></li><li><a href="#ci">CI: test the chart on KIND in GitHub Actions</a></li><li><a href="#cd">CD: release with Helm</a></li><li><a href="#debug">10 production issues: troubleshooting</a></li></ol></div>
 
 <h2 id="concepts">Fundamental concepts</h2>
 <p>The 24 terms to know before anything else, each with a command you will actually use.</p>
@@ -327,16 +327,72 @@ jobs:
             --atomic --wait --timeout 5m</code></pre>
 <div class="note">The AKS cluster must be able to pull from ACR: <code>az aks update -n aks-uat -g rg-uat --attach-acr myacr</code>.</div>
 
-<h2 id="debug">Troubleshooting cheatsheet</h2>
-<table><tr><th>Symptom</th><th>Check</th></tr>
-<tr><td>Pod Pending</td><td><code>kubectl describe pod X</code>: resources, taints, PVC</td></tr>
-<tr><td>ImagePullBackOff</td><td>Image name/tag, registry auth, <code>--attach-acr</code>, or KIND needs <code>kind load</code></td></tr>
-<tr><td>CrashLoopBackOff</td><td><code>kubectl logs X --previous</code></td></tr>
-<tr><td>Service unreachable</td><td><code>kubectl get endpoints svc</code>: selectors must match pod labels</td></tr>
-<tr><td>Helm stuck</td><td><code>helm status</code>, <code>helm history</code>, then <code>helm rollback</code></td></tr></table>
-<pre><code>kubectl get events --sort-by=.lastTimestamp
-kubectl top pods
-kubectl exec -it POD -- sh</code></pre>
+<h2 id="debug">10 Kubernetes production issues</h2>
+<p>Symptoms, possible causes and the first checks to run.</p>
+<table>
+<tr><th>Issue</th><th>What you see / possible causes</th><th>First checks</th></tr>
+<tr><td><b>CrashLoopBackOff</b></td><td>Repeated restarts. App errors, bad config or failed probes.</td><td>Read previous logs; inspect exit reason and events.<br><code>kubectl logs POD --previous</code></td></tr>
+<tr><td><b>ImagePullBackOff</b></td><td>Image cannot be pulled. Wrong tag, registry auth or connectivity.</td><td>Check image name, pull secrets and pod events. On AKS verify <code>--attach-acr</code>; on KIND use <code>kind load</code>.</td></tr>
+<tr><td><b>Pod Pending</b></td><td>Pod not ready to run. Scheduling or storage constraints.</td><td>Check events, requests, taints, affinity and PVCs.<br><code>kubectl describe pod POD</code></td></tr>
+<tr><td><b>Service unreachable</b></td><td>Connection refused or timeout. Selector, port or readiness mismatch.</td><td>Check labels, targetPort, EndpointSlices and NetworkPolicies.<br><code>kubectl get endpointslices -l kubernetes.io/service-name=SVC</code></td></tr>
+<tr><td><b>Ingress 502/503</b></td><td>Gateway errors. Backend or routing problems.</td><td>Check controller logs, Service ports and ready backends.</td></tr>
+<tr><td><b>OOMKilled</b></td><td>Container killed for memory. Limit hit or node memory pressure.</td><td>Inspect termination reason, memory usage and node events.<br><code>kubectl describe pod POD</code> (Last State: OOMKilled)</td></tr>
+<tr><td><b>Node NotReady</b></td><td>Node unhealthy. Kubelet, runtime or network issue.</td><td>Describe node; inspect conditions and kubelet logs.<br><code>journalctl -u kubelet</code> on the node</td></tr>
+<tr><td><b>PVC Pending</b></td><td>Storage claim not bound. Class, capacity or provisioning issue.</td><td>Describe PVC; check StorageClass, CSI and binding mode.</td></tr>
+<tr><td><b>DNS failure</b></td><td>Service names do not resolve. DNS config or connectivity issue.</td><td>Test DNS inside a pod; check CoreDNS and DNS traffic.</td></tr>
+<tr><td><b>High CPU / Memory</b></td><td>Slow responses or resource pressure. Load or application issue.</td><td>Check metrics, throttling, requests, limits and app profiles.<br><code>kubectl top pods</code></td></tr>
+</table>
+
+<h3>Start with evidence</h3>
+<pre><code>kubectl describe pod &lt;pod&gt; -n &lt;ns&gt;
+kubectl logs &lt;pod&gt; -n &lt;ns&gt; -c &lt;container&gt; --previous
+kubectl get events -n &lt;ns&gt; --sort-by=.metadata.creationTimestamp
+kubectl top pods -n &lt;ns&gt;</code></pre>
+
+<h3>Issue-specific commands</h3>
+<pre data-file="CrashLoopBackOff / OOMKilled"><code># exit code and last state (137 = killed, often OOM)
+kubectl get pod POD -n NS -o jsonpath='{.status.containerStatuses[0].lastState}'
+kubectl describe pod POD -n NS | grep -A6 "Last State"
+# probe settings
+kubectl get pod POD -n NS -o yaml | grep -A8 -E "livenessProbe|readinessProbe"</code></pre>
+<pre data-file="ImagePullBackOff"><code>kubectl describe pod POD -n NS | grep -A10 Events
+kubectl get pod POD -n NS -o jsonpath='{.spec.containers[*].image}'
+kubectl get secret -n NS                      # is the pull secret there?
+az acr repository show-tags -n myacr --repository myapp -o table
+az aks check-acr -n aks-uat -g rg-uat --acr myacr.azurecr.io</code></pre>
+<pre data-file="Pending / PVC Pending"><code>kubectl describe pod POD -n NS               # look for FailedScheduling
+kubectl describe nodes | grep -A5 -E "Taints|Allocated resources"
+kubectl get pvc -n NS
+kubectl describe pvc PVC -n NS
+kubectl get storageclass</code></pre>
+<pre data-file="Service unreachable / Ingress 502/503"><code>kubectl get svc,endpointslices -n NS
+kubectl get pods -n NS --show-labels          # labels must match the Service selector
+kubectl describe svc SVC -n NS                # port vs targetPort
+kubectl get networkpolicy -n NS
+kubectl logs -n ingress-nginx deploy/ingress-nginx-controller --tail=100
+# test from inside the cluster
+kubectl run tmp --rm -it --image=busybox:1.36 -n NS -- wget -qO- http://SVC:80</code></pre>
+<pre data-file="Node NotReady"><code>kubectl get nodes
+kubectl describe node NODE | grep -A12 Conditions
+kubectl get events --field-selector involvedObject.kind=Node
+# on the node (SSH / debug pod)
+systemctl status kubelet containerd
+journalctl -u kubelet --since "30 min ago" --no-pager</code></pre>
+<pre data-file="DNS failure"><code>kubectl run dnstest --rm -it --image=busybox:1.36 -- nslookup kubernetes.default
+kubectl get pods -n kube-system -l k8s-app=kube-dns
+kubectl logs -n kube-system -l k8s-app=kube-dns --tail=50
+kubectl get cm coredns -n kube-system -o yaml</code></pre>
+<pre data-file="High CPU / Memory"><code>kubectl top pods -n NS --sort-by=memory
+kubectl top nodes
+kubectl describe pod POD -n NS | grep -A4 -E "Limits|Requests"
+# CPU throttling shows in your metrics (Prometheus: container_cpu_cfs_throttled_periods_total)
+kubectl get hpa -n NS</code></pre>
+
+<h3>Other useful commands</h3>
+<pre><code>kubectl exec -it POD -n NS -- sh
+kubectl get events -A --sort-by=.lastTimestamp | tail -30
+helm status RELEASE -n NS &amp;&amp; helm history RELEASE -n NS     # Helm stuck? then: helm rollback RELEASE REV</code></pre>
+<div class="note ok">Rule of thumb: events first, then logs, then metrics. Most issues name themselves in <code>kubectl describe</code> within the first 20 lines of Events.</div>
 
 <div class="pager"><a href="terraform.html">&larr; Terraform</a><a href="aca-aks.html">ACA &amp; AKS &rarr;</a></div>
 </main><footer>&copy; 2026 Himansu Kumar Behera</footer>
