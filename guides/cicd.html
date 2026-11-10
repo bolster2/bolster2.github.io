@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub Workflows + Jenkinsfile | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css"></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a><a class="on" href="cicd.html">CI/CD</a></div></nav>
+<main>
+<div class="tag">GUIDE 07</div>
+<h1><span class="grad">GitHub workflows</span> and <span class="grad">Jenkinsfile</span> for Node.js and Maven apps</h1>
+<p class="sub">Pipeline templates to build, test and deploy several applications: one per app, a combined monorepo setup, and the same pipelines in Jenkins.</p>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#layout">Repo layout and the pipeline stages</a></li>
+<li><a href="#gh-node">GitHub Actions: Node.js app</a></li>
+<li><a href="#gh-maven">GitHub Actions: Maven app</a></li>
+<li><a href="#gh-multi">GitHub Actions: many apps in one repo</a></li>
+<li><a href="#gh-reuse">Reusable workflow (no copy-paste)</a></li>
+<li><a href="#j-node">Jenkinsfile: Node.js app</a></li>
+<li><a href="#j-maven">Jenkinsfile: Maven app</a></li>
+<li><a href="#j-multi">Jenkinsfile: many apps</a></li>
+<li><a href="#j-setup">Jenkins setup notes</a></li>
+<li><a href="#compare">GitHub Actions vs Jenkins</a></li></ol></div>
+
+<h2 id="layout">Repo layout and the pipeline stages</h2>
+<pre><code>repo/
+  apps/
+    node-api/      package.json  server.js  Dockerfile
+    java-service/  pom.xml  src/  Dockerfile
+  .github/workflows/
+    node-api.yml  java-service.yml  ci-multi.yml
+  Jenkinsfile</code></pre>
+<p>Every pipeline below follows the same stages, so you can reason about them the same way:</p>
+<ol>
+<li><b>Checkout</b> the code</li>
+<li><b>Install + test</b> (<code>npm ci &amp;&amp; npm test</code> or <code>mvn verify</code>)</li>
+<li><b>Build the image</b> and tag it with the commit SHA</li>
+<li><b>Push</b> to the registry (ACR)</li>
+<li><b>Deploy</b> to UAT automatically, to Production after approval</li>
+<li><b>Smoke test</b> the health endpoint</li></ol>
+<div class="note ok">Tag images with the commit SHA, never only <code>latest</code>. It makes every deployment traceable and rollback a one-liner. Docker basics are on the <a href="docker.html">Docker page</a>.</div>
+
+<h2 id="gh-node">GitHub Actions: Node.js app</h2>
+<p>Tests with <code>npm</code>, builds and pushes an image to ACR, and updates an Azure Container App. Azure login uses OIDC, with no stored password (setup in the <a href="terraform.html#oidc">Terraform guide</a>).</p>
+<pre data-file=".github/workflows/node-api.yml"><code>name: node-api
+on:
+  push:
+    branches: [main]
+    paths: ["apps/node-api/**"]
+  pull_request:
+    paths: ["apps/node-api/**"]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR: myacr
+  APP: node-api
+  RG: rg-uat
+
+defaults:
+  run:
+    working-directory: apps/node-api
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: apps/node-api/package-lock.json
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm test --if-present
+
+  deploy-uat:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: uat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push
+        run: |
+          az acr login --name $ACR
+          docker build -t $ACR.azurecr.io/$APP:${{ github.sha }} .
+          docker push $ACR.azurecr.io/$APP:${{ github.sha }}
+      - name: Deploy
+        run: |
+          az containerapp update -n $APP -g $RG \
+            --image $ACR.azurecr.io/$APP:${{ github.sha }}
+      - name: Smoke test
+        run: |
+          FQDN=$(az containerapp show -n $APP -g $RG --query properties.configuration.ingress.fqdn -o tsv)
+          curl -fsS --retry 5 --retry-delay 5 https://$FQDN/health
+
+  deploy-prod:
+    needs: deploy-uat
+    runs-on: ubuntu-latest
+    environment: production        # set required reviewers on this environment
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Promote the same image to prod
+        run: |
+          az containerapp update -n $APP-prod -g rg-prod \
+            --image $ACR.azurecr.io/$APP:${{ github.sha }}</code></pre>
+<div class="note">The prod job reuses the image already built and tested for UAT, so what you approved is what ships. Put required reviewers on the <code>production</code> environment in repo Settings, then Environments. For production the registry should be reachable from that environment's identity (grant <b>AcrPull</b>).</div>
+
+<h2 id="gh-maven">GitHub Actions: Maven app</h2>
+<pre data-file=".github/workflows/java-service.yml"><code>name: java-service
+on:
+  push:
+    branches: [main]
+    paths: ["apps/java-service/**"]
+  pull_request:
+    paths: ["apps/java-service/**"]
+
+permissions:
+  id-token: write
+  contents: read
+  checks: write
+
+env:
+  ACR: myacr
+  APP: java-service
+  RG: rg-uat
+  AKS: aks-uat
+
+defaults:
+  run:
+    working-directory: apps/java-service
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+      - name: Build and test
+        run: mvn -B verify
+      - name: Publish test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: apps/java-service/target/surefire-reports
+      - name: Keep the jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: apps/java-service/target/*.jar
+
+  deploy-uat:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: uat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: apps/java-service/target
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push image
+        run: |
+          az acr login --name $ACR
+          docker build -t $ACR.azurecr.io/$APP:${{ github.sha }} .
+          docker push $ACR.azurecr.io/$APP:${{ github.sha }}
+      - uses: azure/aks-set-context@v4
+        with:
+          cluster-name: ${{ env.AKS }}
+          resource-group: ${{ env.RG }}
+      - name: Deploy to AKS
+        uses: azure/k8s-deploy@v5
+        with:
+          namespace: uat
+          manifests: apps/java-service/k8s/deployment.yaml
+          images: ${{ env.ACR }}.azurecr.io/${{ env.APP }}:${{ github.sha }}</code></pre>
+<pre data-file="apps/java-service/Dockerfile"><code># ---- build ----
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /app
+COPY pom.xml .
+RUN mvn -B dependency:go-offline
+COPY src ./src
+RUN mvn -B package -DskipTests
+
+# ---- runtime ----
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+RUN addgroup -S app &amp;&amp; adduser -S app -G app
+USER app
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]</code></pre>
+<p>The workflow above also uploads the jar built by Maven, but the Dockerfile rebuilds it in its own stage. Keep one or the other as your source of truth. The multi-stage Dockerfile is simpler and is enough on its own.</p>
+<h3>No containers? Deploy the jar to a Linux VM</h3>
+<pre data-file="deploy step"><code>- name: Copy jar and restart
+  run: |
+    install -m 600 /dev/null key.pem
+    echo "${{ secrets.VM_SSH_KEY }}" &gt; key.pem
+    scp -i key.pem -o StrictHostKeyChecking=accept-new target/app.jar deploy@${{ vars.VM_HOST }}:/opt/app/app.jar
+    ssh -i key.pem deploy@${{ vars.VM_HOST }} "sudo systemctl restart java-service"
+    rm -f key.pem</code></pre>
+
+<h2 id="gh-multi">GitHub Actions: many apps in one repo</h2>
+<p>One workflow detects which apps changed and builds only those, using a matrix.</p>
+<pre data-file=".github/workflows/ci-multi.yml"><code>name: ci-multi
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            node-api:
+              - 'apps/node-api/**'
+            java-service:
+              - 'apps/java-service/**'
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.changes.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node app
+        if: matrix.app == 'node-api'
+        working-directory: apps/node-api
+        run: |
+          npm ci
+          npm test --if-present
+
+      - name: Java app
+        if: matrix.app == 'java-service'
+        working-directory: apps/java-service
+        run: mvn -B verify
+
+      - name: Build image
+        run: docker build -t ${{ matrix.app }}:${{ github.sha }} apps/${{ matrix.app }}</code></pre>
+<div class="note ok">The Java step needs a JDK. GitHub's Ubuntu runners include Java and Maven, but pin a version with <code>actions/setup-java</code> if you need a specific one.</div>
+
+<h2 id="gh-reuse">Reusable workflow (no copy-paste)</h2>
+<p>Put the shared build and deploy logic in one workflow and call it once per app.</p>
+<pre data-file=".github/workflows/deploy-app.yml"><code>name: deploy-app
+on:
+  workflow_call:
+    inputs:
+      app:
+        type: string
+        required: true
+      path:
+        type: string
+        required: true
+      environment:
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push
+        run: |
+          az acr login --name myacr
+          docker build -t myacr.azurecr.io/${{ inputs.app }}:${{ github.sha }} ${{ inputs.path }}
+          docker push myacr.azurecr.io/${{ inputs.app }}:${{ github.sha }}
+      - name: Deploy
+        run: |
+          az containerapp update -n ${{ inputs.app }} -g rg-${{ inputs.environment }} \
+            --image myacr.azurecr.io/${{ inputs.app }}:${{ github.sha }}</code></pre>
+<pre data-file=".github/workflows/release.yml"><code>name: release
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  node-api:
+    uses: ./.github/workflows/deploy-app.yml
+    with:
+      app: node-api
+      path: apps/node-api
+      environment: uat
+    secrets: inherit
+
+  java-service:
+    uses: ./.github/workflows/deploy-app.yml
+    with:
+      app: java-service
+      path: apps/java-service
+      environment: uat
+    secrets: inherit</code></pre>
+<p>Adding a third app is now one more short job block.</p>
+
+<h2 id="j-node">Jenkinsfile: Node.js app</h2>
+<p>Declarative pipeline. Jenkins runs the build inside a Node container so the agent needs only Docker.</p>
+<pre data-file="apps/node-api/Jenkinsfile"><code>pipeline {
+  agent none
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    timeout(time: 30, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  environment {
+    ACR   = 'myacr'
+    APP   = 'node-api'
+    IMAGE = "${ACR}.azurecr.io/${APP}:${BUILD_NUMBER}"
+  }
+
+  stages {
+    stage('Test') {
+      agent { docker { image 'node:20-alpine' } }
+      steps {
+        sh 'npm ci'
+        sh 'npm run lint --if-present'
+        sh 'npm test --if-present'
+      }
+    }
+
+    stage('Build and push image') {
+      agent any
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'azure-sp',
+                         usernameVariable: 'AZ_ID', passwordVariable: 'AZ_SECRET')]) {
+          sh '''
+            az login --service-principal -u "$AZ_ID" -p "$AZ_SECRET" --tenant "$AZ_TENANT" --output none
+            az acr login --name "$ACR"
+            docker build -t "$IMAGE" .
+            docker push "$IMAGE"
+          '''
+        }
+      }
+    }
+
+    stage('Deploy UAT') {
+      agent any
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'azure-sp',
+                         usernameVariable: 'AZ_ID', passwordVariable: 'AZ_SECRET')]) {
+          sh '''
+            az login --service-principal -u "$AZ_ID" -p "$AZ_SECRET" --tenant "$AZ_TENANT" --output none
+            az containerapp update -n "$APP" -g rg-uat --image "$IMAGE"
+          '''
+        }
+      }
+    }
+
+    stage('Approve production') {
+      when { branch 'main' }
+      steps {
+        timeout(time: 1, unit: 'HOURS') {
+          input message: 'Deploy to production?', ok: 'Deploy'
+        }
+      }
+    }
+
+    stage('Deploy production') {
+      agent any
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'azure-sp',
+                         usernameVariable: 'AZ_ID', passwordVariable: 'AZ_SECRET')]) {
+          sh '''
+            az login --service-principal -u "$AZ_ID" -p "$AZ_SECRET" --tenant "$AZ_TENANT" --output none
+            az containerapp update -n "$APP-prod" -g rg-prod --image "$IMAGE"
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success { echo "Deployed ${IMAGE}" }
+    failure { echo 'Build failed. Check the stage logs.' }
+    always  { cleanWs() }
+  }
+}</code></pre>
+<div class="note">Set <code>AZ_TENANT</code> as a global environment variable in Jenkins (or add it to the <code>environment</code> block). Store the service principal as a <b>Username with password</b> credential with ID <code>azure-sp</code>: the app ID as username and the client secret as password. Never print secrets, and avoid Groovy string interpolation of secrets: single-quoted <code>'''</code> shell blocks, as above, keep them out of the build log.</div>
+<div class="note ok">Each <code>stage</code> that sets its own <code>agent</code> starts on a fresh workspace, so files from the Test stage are not on the other agents. Here that is fine because the later stages check out the code themselves. Use <code>stash</code>/<code>unstash</code> if you need to pass build output between stages.</div>
+
+<h2 id="j-maven">Jenkinsfile: Maven app</h2>
+<pre data-file="apps/java-service/Jenkinsfile"><code>pipeline {
+  agent none
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    timeout(time: 40, unit: 'MINUTES')
+  }
+
+  environment {
+    ACR   = 'myacr'
+    APP   = 'java-service'
+    IMAGE = "${ACR}.azurecr.io/${APP}:${BUILD_NUMBER}"
+  }
+
+  stages {
+    stage('Build and test') {
+      agent {
+        docker {
+          image 'maven:3.9-eclipse-temurin-17'
+          args  '-v $HOME/.m2:/root/.m2'     // cache dependencies between builds
+        }
+      }
+      steps {
+        sh 'mvn -B -ntp verify'
+      }
+      post {
+        always {
+          junit 'target/surefire-reports/*.xml'
+        }
+        success {
+          archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+        }
+      }
+    }
+
+    stage('Image and deploy') {
+      agent any
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'azure-sp',
+                         usernameVariable: 'AZ_ID', passwordVariable: 'AZ_SECRET')]) {
+          sh '''
+            az login --service-principal -u "$AZ_ID" -p "$AZ_SECRET" --tenant "$AZ_TENANT" --output none
+            az acr login --name "$ACR"
+            docker build -t "$IMAGE" .
+            docker push "$IMAGE"
+            az aks get-credentials -n aks-uat -g rg-uat --overwrite-existing
+            kubectl -n uat set image deployment/"$APP" "$APP"="$IMAGE"
+            kubectl -n uat rollout status deployment/"$APP" --timeout=180s
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    failure { echo 'Pipeline failed' }
+    always  { cleanWs() }
+  }
+}</code></pre>
+<p>If your Jenkins has the <b>Maven Integration</b> plugin and a configured tool named <code>maven-3.9</code>, you can use it instead of a container:</p>
+<pre><code>agent any
+tools { maven 'maven-3.9'; jdk 'jdk-17' }
+steps { sh 'mvn -B verify' }</code></pre>
+
+<h2 id="j-multi">Jenkinsfile: many apps</h2>
+<p>One root Jenkinsfile that builds only the apps that changed, in parallel.</p>
+<pre data-file="Jenkinsfile"><code>// true on the first build, or when files under path changed since the last successful build
+def changed(String path) {
+  def base = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT
+  if (!base) { return true }
+  return sh(script: "git diff --name-only ${base} ${env.GIT_COMMIT} -- ${path} | grep -q .",
+            returnStatus: true) == 0
+}
+
+pipeline {
+  agent any
+  options { timestamps(); disableConcurrentBuilds() }
+
+  stages {
+    stage('Detect changes') {
+      steps {
+        script {
+          env.NODE_CHANGED = changed('apps/node-api').toString()
+          env.JAVA_CHANGED = changed('apps/java-service').toString()
+        }
+      }
+    }
+
+    stage('Build changed apps') {
+      parallel {
+
+        stage('node-api') {
+          when { expression { env.NODE_CHANGED == 'true' } }
+          agent { docker { image 'node:20-alpine' } }
+          steps {
+            dir('apps/node-api') {
+              sh 'npm ci'
+              sh 'npm test --if-present'
+            }
+          }
+        }
+
+        stage('java-service') {
+          when { expression { env.JAVA_CHANGED == 'true' } }
+          agent { docker { image 'maven:3.9-eclipse-temurin-17'; args '-v $HOME/.m2:/root/.m2' } }
+          steps {
+            dir('apps/java-service') {
+              sh 'mvn -B -ntp verify'
+            }
+          }
+          post { always { junit 'apps/java-service/target/surefire-reports/*.xml' } }
+        }
+
+      }
+    }
+  }
+}</code></pre>
+<div class="note">Change detection runs in its own stage on a normal agent (where git is installed) and stores the result in environment variables. The container stages then just read those flags. If the diff fails for lack of history, enable a full (non-shallow) clone in the job's checkout options. The first build of a branch builds everything.</div>
+<p>Alternative: keep one Jenkinsfile per app and create a <b>Multibranch Pipeline</b> job per app, each pointing at its own script path (<code>apps/node-api/Jenkinsfile</code>). This is the simplest option when the apps are deployed independently.</p>
+
+<h2 id="j-setup">Jenkins setup notes</h2>
+<ul>
+<li><b>Plugins:</b> Pipeline, Git, Docker Pipeline, Credentials Binding, JUnit, GitHub Branch Source (and Blue Ocean if you like the UI).</li>
+<li><b>Agent needs:</b> Docker, and <code>az</code> / <code>kubectl</code> installed for deploy stages.</li>
+<li><b>Create the job:</b> New Item, Multibranch Pipeline, add the GitHub repo, set the script path.</li>
+<li><b>Trigger on push:</b> add a GitHub webhook to <code>https://YOUR_JENKINS/github-webhook/</code> and enable "GitHub hook trigger" in the job, or poll SCM as a fallback.</li>
+<li><b>Credentials:</b> Manage Jenkins, Credentials. Keep the service principal secret there, never in the Jenkinsfile.</li>
+<li><b>Backup:</b> back up <code>JENKINS_HOME</code> (jobs, credentials, config) on a schedule.</li>
+</ul>
+
+<h2 id="compare">GitHub Actions vs Jenkins</h2>
+<table><tr><th></th><th>GitHub Actions</th><th>Jenkins</th></tr>
+<tr><td>Hosting</td><td>Managed by GitHub</td><td>You run and patch the server</td></tr>
+<tr><td>Setup</td><td>Add a YAML file to the repo</td><td>Install, plugins, agents, credentials</td></tr>
+<tr><td>Azure auth</td><td>OIDC, no stored secret</td><td>Stored service principal secret (or a managed identity on an Azure VM agent)</td></tr>
+<tr><td>Best for</td><td>Repos on GitHub, quick start, matrices</td><td>Private networks, heavy customisation, existing Jenkins estate</td></tr>
+<tr><td>Cost</td><td>Free minutes then per-minute</td><td>Server and maintenance cost</td></tr></table>
+
+<div class="pager"><a href="linux-migration.html">&larr; Linux migration</a><a href="../index.html#guides">All guides &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+<script src="guide.js"></script></body></html>
