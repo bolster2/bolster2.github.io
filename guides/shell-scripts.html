@@ -388,7 +388,7 @@ echo "uploaded to s3://$BUCKET/$PREFIX/"
 aws s3 ls "s3://$BUCKET/$PREFIX/" --human-readable | tail -5
 </script>
 
-<script type="text/plain" data-id="blob-upload" data-cat="Sync and Transfer" data-title="Upload backups to Azure Blob Storage" data-file="backup-to-blob.sh" data-desc="Copy backup files to an Azure storage container, signing in with a managed identity or az login." data-params='[{"k":"BACKUP_DIR","l":"Local backup folder","d":"/var/backups"},{"k":"ACCOUNT","l":"Storage account","d":"mystorageaccount"},{"k":"CONTAINER","l":"Container","d":"db-backups"},{"k":"PREFIX","l":"Folder in container","d":"prod"}]' data-cron="45 3 * * * /opt/scripts/backup-to-blob.sh >> /var/log/backup-to-blob.cron.log 2>&1" data-notes="On an Azure VM, enable a managed identity and run az login --identity once. No keys are stored.|Give the identity the Storage Blob Data Contributor role on the container.|Set a lifecycle management policy on the storage account to move old backups to Cool or Archive and delete them later.|--overwrite false skips blobs that already exist, so reruns are cheap.">
+<script type="text/plain" data-id="blob-upload" data-cat="Sync and Transfer" data-title="Upload backups to Azure Blob Storage" data-file="backup-to-blob.sh" data-desc="Copy backup files to an Azure storage container, signing in with a managed identity or az login." data-params='[{"k":"BACKUP_DIR","l":"Local backup folder","d":"/var/backups"},{"k":"ACCOUNT","l":"Storage account","d":"mystorageaccount"},{"k":"CONTAINER","l":"Container","d":"db-backups"},{"k":"PREFIX","l":"Folder in container","d":"prod"}]' data-cron="45 3 * * * /opt/scripts/backup-to-blob.sh >> /var/log/backup-to-blob.cron.log 2>&1" data-notes="Sign in first. On an Azure VM, enable a managed identity and run az login --identity once. No keys are stored.|Give the identity the Storage Blob Data Contributor role on the container.|Set a lifecycle management policy on the storage account to move old backups to Cool or Archive and delete them later.|--overwrite false skips blobs that already exist, so reruns are cheap.">
 #!/usr/bin/env bash
 # Upload backup files to Azure Blob Storage
 set -euo pipefail
@@ -401,8 +401,8 @@ PREFIX="{{PREFIX}}"
 command -v az >/dev/null || { echo "az cli not installed" >&2; exit 1; }
 [[ -d "$BACKUP_DIR" ]] || { echo "missing folder: $BACKUP_DIR" >&2; exit 1; }
 
-# sign in with the VM managed identity if no session exists
-az account show >/dev/null 2>&1 || az login --identity --output none
+# you must be signed in already (az login, or az login --identity on an Azure VM)
+az account show > /dev/null 2>&1 || { echo "not signed in to Azure. Run: az login   (or: az login --identity on an Azure VM)" >&2; exit 1; }
 
 az storage blob upload-batch \
   --account-name "$ACCOUNT" \
@@ -618,6 +618,480 @@ line "LISTENING PORTS"; ss -tulpn 2>/dev/null | head -20
 line "FAILED SERVICES"; systemctl --failed --no-legend 2>/dev/null || echo "systemctl not available"
 line "RECENT ERRORS";   journalctl -p err -n 15 --no-pager 2>/dev/null || true
 line "LOGGED IN";       who
+</script>
+
+<script type="text/plain" data-id="tar-backup" data-cat="Backup" data-title="Tar backup of folders and configs" data-file="tar-backup.sh" data-desc="Archive important folders (configs, web roots, app data) with a checksum and retention." data-params='[{"k":"NAME","l":"Backup name","d":"server-files"},{"k":"SOURCES","l":"Folders (space separated)","d":"/etc /var/www /opt/app"},{"k":"BACKUP_DIR","l":"Backup folder","d":"/var/backups/files"},{"k":"RETENTION_DAYS","l":"Keep backups (days)","d":"14"}]' data-cron="0 1 * * * /opt/scripts/tar-backup.sh >> /var/log/tar-backup.cron.log 2>&1" data-notes="Run as root to read every file in /etc.|tar exits with 1 when a file changes while it is being read. This script treats that as a warning, and anything higher as a failure.|A .sha256 file is written next to each archive so you can check it after copying it elsewhere.|Restore with: tar -xzf ARCHIVE -C /restore/path">
+#!/usr/bin/env bash
+# Archive folders to a .tar.gz with checksum and retention
+set -euo pipefail
+
+NAME="{{NAME}}"
+SOURCES="{{SOURCES}}"
+BACKUP_DIR="{{BACKUP_DIR}}"
+RETENTION_DAYS={{RETENTION_DAYS}}
+
+TS="$(date +%F_%H%M%S)"
+OUT="$BACKUP_DIR/${NAME}_${TS}.tar.gz"
+mkdir -p "$BACKUP_DIR"
+read -r -a SRC <<< "$SOURCES"
+
+for s in "${SRC[@]}"; do
+  [[ -e "$s" ]] || { echo "missing source: $s" >&2; exit 1; }
+done
+
+set +e
+tar -czf "$OUT" --exclude='*.tmp' --exclude='*.swp' "${SRC[@]}"
+RC=$?
+set -e
+if (( RC > 1 )); then
+  rm -f "$OUT"; echo "tar failed (exit $RC)" >&2; exit "$RC"
+fi
+if (( RC == 1 )); then echo "warning: some files changed while archiving"; fi
+
+gzip -t "$OUT"
+( cd "$BACKUP_DIR" && sha256sum "$(basename "$OUT")" > "$(basename "$OUT").sha256" )
+echo "created $OUT ($(du -h "$OUT" | cut -f1))"
+
+find "$BACKUP_DIR" -type f \( -name "${NAME}_*.tar.gz" -o -name "${NAME}_*.tar.gz.sha256" \) \
+  -mmin +"$((RETENTION_DAYS * 1440))" -print -delete
+</script>
+
+<script type="text/plain" data-id="user-add" data-cat="Security" data-title="Create a user with SSH key login" data-file="add-user.sh" data-desc="Create a Linux user, install their public SSH key with correct permissions, and optionally grant sudo." data-params='[{"k":"USERNAME","l":"Username","d":"deploy"},{"k":"PUBKEY","l":"Public SSH key (one line)","d":"ssh-ed25519 AAAA...paste-the-real-key... you@laptop"},{"k":"GIVE_SUDO","l":"Give sudo access","t":"select","o":[["No","no"],["Yes","yes"]],"d":"no"}]' data-cron="" data-notes="Run as root. The script validates the key with ssh-keygen, so a placeholder key is rejected.|Never paste a private key here. Only the public key (the .pub file) belongs on the server.|Users that log in only with a key have no password, so sudo asks for one they do not have. Set SUDO_NOPASSWD=1 for those users, or give them a password with passwd.|The sudoers file is checked with visudo before it is kept. A broken sudoers file can lock out sudo for everyone.">
+#!/usr/bin/env bash
+# Create a user with SSH key login. Usage: sudo ./add-user.sh
+set -euo pipefail
+
+USERNAME="{{USERNAME}}"
+PUBKEY="{{PUBKEY}}"
+GIVE_SUDO="{{GIVE_SUDO}}"              # yes or no
+SUDO_NOPASSWD="${SUDO_NOPASSWD:-0}"    # 1 = sudo without a password
+
+[[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
+[[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "invalid username" >&2; exit 1; }
+[[ "$PUBKEY" =~ ^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+)[[:space:]] ]] \
+  || { echo "PUBKEY must be a public key line" >&2; exit 1; }
+ssh-keygen -l -f /dev/stdin <<< "$PUBKEY" > /dev/null 2>&1 \
+  || { echo "PUBKEY is not a valid SSH public key" >&2; exit 1; }
+
+if id "$USERNAME" > /dev/null 2>&1; then
+  echo "user $USERNAME already exists"
+else
+  useradd -m -s /bin/bash "$USERNAME"
+  echo "created user $USERNAME"
+fi
+
+HOME_DIR="$(getent passwd "$USERNAME" | cut -d: -f6)"
+GRP="$(id -gn "$USERNAME")"
+install -d -m 700 -o "$USERNAME" -g "$GRP" "$HOME_DIR/.ssh"
+AK="$HOME_DIR/.ssh/authorized_keys"
+touch "$AK"
+if ! grep -qxF "$PUBKEY" "$AK"; then echo "$PUBKEY" >> "$AK"; fi
+chown "$USERNAME:$GRP" "$AK"
+chmod 600 "$AK"
+
+if [[ "$GIVE_SUDO" == "yes" ]]; then
+  if getent group sudo > /dev/null; then SUDO_GROUP=sudo; else SUDO_GROUP=wheel; fi
+  usermod -aG "$SUDO_GROUP" "$USERNAME"
+  echo "added to group $SUDO_GROUP"
+  if [[ "$SUDO_NOPASSWD" == "1" ]]; then
+    F="/etc/sudoers.d/90-$USERNAME"
+    echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "$F"
+    chmod 440 "$F"
+    if ! visudo -cf "$F" > /dev/null; then rm -f "$F"; echo "invalid sudoers entry removed" >&2; exit 1; fi
+    echo "passwordless sudo enabled"
+  fi
+fi
+echo "done. Test: ssh $USERNAME@HOST"
+</script>
+
+<script type="text/plain" data-id="ssh-harden" data-cat="Security" data-title="Harden SSH (key-only, no root login)" data-file="ssh-harden.sh" data-desc="Disable password logins and root login with a validated drop-in config. Includes lock-out protections." data-params='[{"k":"SSH_PORT","l":"SSH port","d":"22"}]' data-cron="" data-notes="WARNING: keep your current SSH session open. Open a second session and confirm key login works before you close the first.|It refuses to run if no authorized_keys file exists, because you would be locked out.|The file is named 00-hardening.conf on purpose. sshd uses the first value it reads, and cloud images often ship 50-cloud-init.conf with PasswordAuthentication yes.|Only change the port if you also open it in the firewall (see the ufw script) and cloud security groups first.|The config is tested with sshd -t and removed again if the test fails.">
+#!/usr/bin/env bash
+# Harden sshd: key-only login, no root login.
+# WARNING: keep your current session open and test a NEW login before closing it.
+set -euo pipefail
+
+SSH_PORT="{{SSH_PORT}}"
+CONF="/etc/ssh/sshd_config.d/00-hardening.conf"
+
+[[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
+
+if ! grep -Eqs '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config; then
+  echo "sshd_config has no Include for sshd_config.d. Edit /etc/ssh/sshd_config by hand." >&2
+  exit 1
+fi
+
+KEYS=$(find /home /root -maxdepth 3 -name authorized_keys -size +0 2>/dev/null | wc -l)
+if (( KEYS == 0 )); then
+  echo "no authorized_keys found. You would be locked out. Aborting." >&2
+  exit 1
+fi
+
+echo "This will set: PasswordAuthentication no, PermitRootLogin no, Port $SSH_PORT"
+read -r -p "Type YES to continue: " ANSWER
+[[ "$ANSWER" == "YES" ]] || { echo "cancelled"; exit 1; }
+
+if [[ -f "$CONF" ]]; then cp -a "$CONF" "$CONF.bak.$(date +%s)"; fi
+cat > "$CONF" <<EOF
+Port $SSH_PORT
+PasswordAuthentication no
+PermitRootLogin no
+PubkeyAuthentication yes
+KbdInteractiveAuthentication no
+X11Forwarding no
+MaxAuthTries 3
+EOF
+
+if ! sshd -t; then
+  echo "config test failed, reverting" >&2
+  rm -f "$CONF"
+  exit 1
+fi
+
+systemctl reload ssh 2> /dev/null || systemctl reload sshd
+echo "applied. Open a NEW terminal and test login before closing this one."
+</script>
+
+<script type="text/plain" data-id="ufw" data-cat="Security" data-title="Firewall setup with ufw" data-file="ufw-setup.sh" data-desc="Default-deny firewall that allows SSH first, then your service ports. Dry run by default." data-params='[{"k":"SSH_PORT","l":"SSH port","d":"22"},{"k":"ALLOW_PORTS","l":"Other TCP ports (space separated)","d":"80 443"}]' data-cron="" data-notes="Ubuntu and Debian. On RHEL, CentOS and Fedora use firewalld instead.|The SSH rule is added before the firewall is enabled, so you do not cut off your own session.|ufw limit rate-limits SSH to slow down brute-force attempts.|Cloud security groups or NSGs are separate from this. Open the port in both places.|Check the result with: sudo ufw status verbose">
+#!/usr/bin/env bash
+# Basic ufw firewall. DRY RUN unless --apply.
+set -euo pipefail
+
+SSH_PORT="{{SSH_PORT}}"
+ALLOW_PORTS="{{ALLOW_PORTS}}"
+APPLY=0
+if [[ "${1:-}" == "--apply" ]]; then APPLY=1; fi
+
+if [[ "$APPLY" -eq 1 && $EUID -ne 0 ]]; then echo "run as root" >&2; exit 1; fi
+command -v ufw > /dev/null || { echo "ufw is not installed" >&2; exit 1; }
+
+run() { echo "+ $*"; if [[ "$APPLY" -eq 1 ]]; then "$@"; fi; }
+
+run ufw default deny incoming
+run ufw default allow outgoing
+run ufw limit "${SSH_PORT}/tcp"                # SSH first, so you stay connected
+
+for p in $ALLOW_PORTS; do
+  run ufw allow "${p}/tcp"
+done
+
+run ufw --force enable
+run ufw status verbose
+
+if [[ "$APPLY" -eq 0 ]]; then echo; echo "(dry run) add --apply to make these changes"; fi
+</script>
+
+<script type="text/plain" data-id="nginx-reload" data-cat="Web Server" data-title="Nginx: back up, test and reload" data-file="nginx-safe-reload.sh" data-desc="Archive the current config, test the new one, and reload only if the test passes." data-params='[{"k":"CONF_DIR","l":"Nginx config folder","d":"/etc/nginx"},{"k":"BACKUP_DIR","l":"Backup folder","d":"/var/backups/nginx"},{"k":"KEEP","l":"Backups to keep","d":"10"}]' data-cron="" data-notes="Run it after you edit the config. A failed test leaves the running nginx untouched, so a typo does not cause an outage.|To roll back: tar -xzf ARCHIVE -C /etc then run this script again.|reload keeps connections alive, while restart drops them.">
+#!/usr/bin/env bash
+# Back up nginx config, test it, reload if valid
+set -euo pipefail
+
+CONF_DIR="{{CONF_DIR}}"
+BACKUP_DIR="{{BACKUP_DIR}}"
+KEEP={{KEEP}}
+
+[[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
+mkdir -p "$BACKUP_DIR"
+
+ARCHIVE="$BACKUP_DIR/nginx-conf-$(date +%F_%H%M%S).tar.gz"
+tar -czf "$ARCHIVE" -C "$(dirname "$CONF_DIR")" "$(basename "$CONF_DIR")"
+echo "backup saved: $ARCHIVE"
+
+if nginx -t; then
+  systemctl reload nginx
+  echo "nginx reloaded"
+else
+  echo "config test FAILED. nginx was not reloaded." >&2
+  exit 1
+fi
+
+# keep only the newest N backups
+ls -1t "$BACKUP_DIR"/nginx-conf-*.tar.gz 2> /dev/null | tail -n +"$((KEEP + 1))" | xargs -r rm -f
+</script>
+
+<script type="text/plain" data-id="nginx-summary" data-cat="Web Server" data-title="Nginx access log summary" data-file="nginx-log-summary.sh" data-desc="Status codes, busiest IPs, top URLs, 5xx errors and requests per hour from an access log." data-params='[{"k":"LOG_FILE","l":"Access log","d":"/var/log/nginx/access.log"},{"k":"TOP","l":"Rows per section","d":"10"}]' data-cron="" data-notes="Works with the default combined log format.|Read-only, so it is safe on production.|Behind a load balancer the first column may be the balancer IP. Log X-Forwarded-For to see real clients.|For rotated logs use zcat access.log.*.gz | script logic, or point LOG_FILE at a single file.">
+#!/usr/bin/env bash
+# Summarise an nginx access log (combined format). Read-only.
+set -uo pipefail
+
+LOG_FILE="{{LOG_FILE}}"
+TOP={{TOP}}
+
+[[ -r "$LOG_FILE" ]] || { echo "cannot read $LOG_FILE" >&2; exit 1; }
+
+echo "== total requests ==";            wc -l < "$LOG_FILE"
+echo; echo "== status codes ==";         awk '{print $9}' "$LOG_FILE" | sort | uniq -c | sort -rn | head -n "$TOP"
+echo; echo "== top $TOP client IPs ==";  awk '{print $1}' "$LOG_FILE" | sort | uniq -c | sort -rn | head -n "$TOP"
+echo; echo "== top $TOP URLs ==";        awk '{print $7}' "$LOG_FILE" | sort | uniq -c | sort -rn | head -n "$TOP"
+echo; echo "== top $TOP URLs returning 5xx =="
+awk '$9 ~ /^5/ {print $9, $7}' "$LOG_FILE" | sort | uniq -c | sort -rn | head -n "$TOP"
+echo; echo "== requests per hour (latest 24) =="
+awk '{print substr($4,2,14)}' "$LOG_FILE" | sort | uniq -c | tail -24
+</script>
+
+<script type="text/plain" data-id="certbot" data-cat="Web Server" data-title="Lets Encrypt renew and reload" data-file="certbot-renew.sh" data-desc="Renew certificates with certbot and reload the web server only when something was renewed." data-params='[{"k":"WEB_SERVICE","l":"Web server service","d":"nginx"}]' data-cron="0 3 * * * /opt/scripts/certbot-renew.sh >> /var/log/certbot-renew.cron.log 2>&1" data-notes="Most certbot installs already have a renewal timer. Check with: systemctl list-timers | grep certbot|Use --dry-run to test the renewal without changing anything.|The deploy hook runs only for certificates that were actually renewed.">
+#!/usr/bin/env bash
+# Renew Let's Encrypt certificates and reload the web server when needed.
+# Usage: ./certbot-renew.sh [--dry-run]
+set -euo pipefail
+
+WEB_SERVICE="{{WEB_SERVICE}}"
+
+command -v certbot > /dev/null || { echo "certbot is not installed" >&2; exit 1; }
+[[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
+
+if [[ "${1:-}" == "--dry-run" ]]; then
+  certbot renew --dry-run
+else
+  certbot renew --quiet --deploy-hook "systemctl reload $WEB_SERVICE"
+fi
+
+echo "--- certificates ---"
+certbot certificates 2> /dev/null | grep -E "Certificate Name|Expiry Date" || true
+</script>
+
+<script type="text/plain" data-id="log-search" data-cat="Monitoring" data-title="Search logs for errors" data-file="log-search.sh" data-desc="Find recent errors in a log file or in journald for a service, with counts." data-params='[{"k":"LOG_FILE","l":"Log file (empty = use journald)","d":"/var/log/myapp/app.log"},{"k":"UNIT","l":"systemd unit (for journald)","d":"myapp"},{"k":"SINCE","l":"Since (journald)","d":"1 hour ago"},{"k":"PATTERN","l":"Pattern (regex, case-insensitive)","d":"error|exception|fatal|timeout"},{"k":"LINES","l":"Lines to show","d":"40"}]' data-cron="" data-notes="Leave LOG_FILE empty to read the systemd journal for UNIT instead.|The pattern is an extended regex, so use | for OR.|Pipe the output to a file when you need to attach it to an incident ticket.">
+#!/usr/bin/env bash
+# Search a log file (or journald) for a pattern. Read-only.
+set -uo pipefail
+
+LOG_FILE="{{LOG_FILE}}"
+UNIT="{{UNIT}}"
+SINCE="{{SINCE}}"
+PATTERN="{{PATTERN}}"
+LINES={{LINES}}
+
+if [[ -n "$LOG_FILE" ]]; then
+  [[ -r "$LOG_FILE" ]] || { echo "cannot read $LOG_FILE" >&2; exit 1; }
+  SRC=(cat "$LOG_FILE")
+  echo "searching $LOG_FILE"
+else
+  SRC=(journalctl -u "$UNIT" --since "$SINCE" --no-pager -o short-iso)
+  echo "searching journal for $UNIT since $SINCE"
+fi
+
+COUNT=$("${SRC[@]}" 2> /dev/null | grep -Eic "$PATTERN")
+echo "matches: $COUNT"
+echo "--- last $LINES matching lines ---"
+"${SRC[@]}" 2> /dev/null | grep -Ei "$PATTERN" | tail -n "$LINES"
+</script>
+
+<script type="text/plain" data-id="mysql-status" data-cat="Monitoring" data-title="MySQL quick status" data-file="mysql-status.sh" data-desc="Uptime, connections, running queries, database sizes, slow queries and replica state in one go." data-params='[]' data-cron="" data-notes="Read-only. Uses ~/.my.cnf for the login, like the backup script.|The running-queries list is the first thing to check when the site feels slow.|MySQL 8.0.22 and later use SHOW REPLICA STATUS. Older versions use SHOW SLAVE STATUS, and the script tries both.">
+#!/usr/bin/env bash
+# MySQL / MariaDB quick health snapshot. Read-only.
+set -uo pipefail
+
+DEFAULTS_FILE="${DEFAULTS_FILE:-$HOME/.my.cnf}"
+q() { mysql --defaults-extra-file="$DEFAULTS_FILE" -e "$1"; }
+
+echo "== version and uptime ==";   q "SELECT VERSION() AS version;" ; q "SHOW GLOBAL STATUS LIKE 'Uptime';"
+echo; echo "== connections ==";      q "SHOW GLOBAL STATUS LIKE 'Threads_connected';" ; q "SHOW VARIABLES LIKE 'max_connections';"
+echo; echo "== running queries (non-idle) =="
+q "SELECT id, user, db, time AS secs, state, LEFT(info, 80) AS query FROM information_schema.processlist WHERE command <> 'Sleep' ORDER BY time DESC LIMIT 10;"
+echo; echo "== database sizes (MB) =="
+q "SELECT table_schema AS db, ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) AS size_mb FROM information_schema.tables GROUP BY table_schema ORDER BY size_mb DESC;"
+echo; echo "== slow queries ==";     q "SHOW GLOBAL STATUS LIKE 'Slow_queries';"
+echo; echo "== replication (only if this is a replica) =="
+q "SHOW REPLICA STATUS\G" 2> /dev/null || q "SHOW SLAVE STATUS\G" 2> /dev/null || echo "not a replica"
+</script>
+
+<script type="text/plain" data-id="pg-status" data-cat="Monitoring" data-title="PostgreSQL quick status" data-file="pg-status.sh" data-desc="Connections by state, long-running queries, database and table sizes, lock waits and replica check." data-params='[{"k":"DB_NAME","l":"Database","d":"appdb"},{"k":"DB_HOST","l":"Host","d":"127.0.0.1"},{"k":"DB_PORT","l":"Port","d":"5432"},{"k":"DB_USER","l":"User","d":"postgres"}]' data-cron="" data-notes="Read-only queries on the statistics views.|Uses ~/.pgpass for the password.|A connection stuck as idle in transaction for a long time can block vacuum and hold locks. Look for it in the state counts.">
+#!/usr/bin/env bash
+# PostgreSQL quick health snapshot. Read-only.
+set -uo pipefail
+
+DB_NAME="{{DB_NAME}}"
+DB_HOST="{{DB_HOST}}"
+DB_PORT="{{DB_PORT}}"
+DB_USER="{{DB_USER}}"
+export PGPASSFILE="${PGPASSFILE:-$HOME/.pgpass}"
+
+P=(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" --no-password -d "$DB_NAME" -X)
+
+echo "== version ==";                 "${P[@]}" -c "SELECT version();"
+echo; echo "== connections by state =="
+"${P[@]}" -c "SELECT state, count(*) FROM pg_stat_activity GROUP BY state ORDER BY 2 DESC;"
+echo; echo "== longest running queries =="
+"${P[@]}" -c "SELECT pid, usename, now() - query_start AS runtime, state, left(query, 70) AS query FROM pg_stat_activity WHERE state <> 'idle' AND pid <> pg_backend_pid() ORDER BY runtime DESC LIMIT 10;"
+echo; echo "== database sizes =="
+"${P[@]}" -c "SELECT datname, pg_size_pretty(pg_database_size(datname)) AS size FROM pg_database ORDER BY pg_database_size(datname) DESC;"
+echo; echo "== 10 largest tables =="
+"${P[@]}" -c "SELECT relname AS table, pg_size_pretty(pg_total_relation_size(relid)) AS total FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 10;"
+echo; echo "== queries waiting on locks =="
+"${P[@]}" -c "SELECT count(*) AS waiting FROM pg_locks WHERE NOT granted;"
+echo; echo "== replica? =="
+"${P[@]}" -c "SELECT pg_is_in_recovery() AS is_replica;"
+</script>
+
+<script type="text/plain" data-id="swap" data-cat="System" data-title="Create a swap file" data-file="create-swap.sh" data-desc="Add a swap file on a small VM, make it permanent, and lower swappiness." data-params='[{"k":"SIZE_GB","l":"Swap size (GB)","d":"2"}]' data-cron="" data-notes="Swap is a safety net for memory spikes. It is not a replacement for enough RAM.|Safe to run twice. It does nothing if /swapfile is already active.|Not suitable for some filesystems such as btrfs or ZFS without extra steps. Check df -T first.|Many Kubernetes nodes need swap off. Do not add it on kubelet nodes unless you know it is supported.">
+#!/usr/bin/env bash
+# Create and enable a swap file
+set -euo pipefail
+
+SIZE_GB={{SIZE_GB}}
+SWAPFILE="/swapfile"
+
+[[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
+
+if swapon --show=NAME --noheadings | grep -qx "$SWAPFILE"; then
+  echo "$SWAPFILE is already active"; swapon --show; exit 0
+fi
+
+if ! fallocate -l "${SIZE_GB}G" "$SWAPFILE" 2> /dev/null; then
+  dd if=/dev/zero of="$SWAPFILE" bs=1M count="$((SIZE_GB * 1024))" status=progress
+fi
+chmod 600 "$SWAPFILE"
+mkswap "$SWAPFILE"
+swapon "$SWAPFILE"
+
+if ! grep -q "^$SWAPFILE " /etc/fstab; then
+  echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
+fi
+
+echo "vm.swappiness=10" > /etc/sysctl.d/99-swappiness.conf
+sysctl -p /etc/sysctl.d/99-swappiness.conf > /dev/null
+
+swapon --show; free -h
+</script>
+
+<script type="text/plain" data-id="systemd-unit" data-cat="System" data-title="Create a systemd service for an app" data-file="create-service.sh" data-desc="Generate a systemd unit file for any app, then enable and start it. Shows the unit and asks before writing." data-params='[{"k":"SERVICE_NAME","l":"Service name","d":"myapp"},{"k":"EXEC_START","l":"Command to run (full paths)","d":"/usr/bin/node /var/www/myapp/server.js"},{"k":"RUN_USER","l":"Run as user","d":"deploy"},{"k":"WORK_DIR","l":"Working directory","d":"/var/www/myapp"},{"k":"ENV_FILE","l":"Environment file (optional)","d":"/etc/myapp.env"}]' data-cron="" data-notes="Use full paths in ExecStart. systemd does not use your shell PATH.|Put secrets in the environment file with chmod 600, not in the unit.|Restart=on-failure restarts the app after crashes, so you may not need the watchdog script.|Logs go to journald: journalctl -u SERVICE -f">
+#!/usr/bin/env bash
+# Create, enable and start a systemd service
+set -euo pipefail
+
+SERVICE_NAME="{{SERVICE_NAME}}"
+EXEC_START="{{EXEC_START}}"
+RUN_USER="{{RUN_USER}}"
+WORK_DIR="{{WORK_DIR}}"
+ENV_FILE="{{ENV_FILE}}"
+
+[[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
+id "$RUN_USER" > /dev/null 2>&1 || { echo "user $RUN_USER does not exist" >&2; exit 1; }
+[[ -d "$WORK_DIR" ]] || { echo "missing folder: $WORK_DIR" >&2; exit 1; }
+
+UNIT="/etc/systemd/system/${SERVICE_NAME}.service"
+CONTENT="[Unit]
+Description=${SERVICE_NAME}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${RUN_USER}
+WorkingDirectory=${WORK_DIR}
+ExecStart=${EXEC_START}
+EnvironmentFile=-${ENV_FILE}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target"
+
+echo "$CONTENT"
+echo
+read -r -p "Write $UNIT and start the service? Type YES: " ANSWER
+[[ "$ANSWER" == "YES" ]] || { echo "cancelled"; exit 1; }
+
+echo "$CONTENT" > "$UNIT"
+systemctl daemon-reload
+systemctl enable --now "$SERVICE_NAME"
+sleep 2
+systemctl status "$SERVICE_NAME" --no-pager
+</script>
+
+<script type="text/plain" data-id="azure-vm-schedule" data-cat="Cloud Cost" data-title="Azure: stop or start tagged VMs (save cost)" data-file="azure-vm-power.sh" data-desc="Deallocate dev and test VMs by tag at night and start them in the morning. Dry run by default." data-params='[{"k":"RESOURCE_GROUP","l":"Resource group","d":"rg-dev"},{"k":"TAG_NAME","l":"Tag name","d":"env"},{"k":"TAG_VALUE","l":"Tag value","d":"dev"},{"k":"ACTION","l":"Action","t":"select","o":[["Deallocate (stop billing)","deallocate"],["Start","start"]],"d":"deallocate"}]' data-cron="0 20 * * 1-5 /opt/scripts/azure-vm-power.sh --apply >> /var/log/azure-vm-power.cron.log 2>&1" data-notes="Deallocate releases the compute, so you stop paying for it. A VM that is only stopped inside the OS is still billed for compute.|Disks, and any static public IP, keep costing a little while the VM is off.|Uses the tag filter, so production VMs without the tag are never touched.|Run it from a machine or automation account with az login --identity or a service principal. Keep one cron for night and another with Start for morning.|Tag names with a hyphen need quoting in the query. Keep to simple names like env.">
+#!/usr/bin/env bash
+# Deallocate or start Azure VMs that carry a tag. DRY RUN unless --apply.
+set -euo pipefail
+
+RESOURCE_GROUP="{{RESOURCE_GROUP}}"
+TAG_NAME="{{TAG_NAME}}"
+TAG_VALUE="{{TAG_VALUE}}"
+ACTION="{{ACTION}}"                 # deallocate or start
+APPLY=0
+if [[ "${1:-}" == "--apply" ]]; then APPLY=1; fi
+
+command -v az > /dev/null || { echo "az cli not installed" >&2; exit 1; }
+az account show > /dev/null 2>&1 || { echo "not signed in to Azure. Run: az login   (or: az login --identity on an Azure VM)" >&2; exit 1; }
+
+mapfile -t IDS < <(az vm list -g "$RESOURCE_GROUP" \
+  --query "[?tags.${TAG_NAME}=='${TAG_VALUE}'].id" -o tsv)
+
+if (( ${#IDS[@]} == 0 )); then echo "no VMs with tag ${TAG_NAME}=${TAG_VALUE} in $RESOURCE_GROUP"; exit 0; fi
+
+echo "VMs to $ACTION:"
+printf '  %s\n' "${IDS[@]}"
+
+if [[ "$APPLY" -eq 1 ]]; then
+  az vm "$ACTION" --ids "${IDS[@]}" --no-wait
+  echo "$ACTION requested for ${#IDS[@]} VM(s)"
+else
+  echo "(dry run) add --apply to do it"
+fi
+</script>
+
+<script type="text/plain" data-id="aws-ec2-schedule" data-cat="Cloud Cost" data-title="AWS: stop or start tagged EC2 instances" data-file="aws-ec2-power.sh" data-desc="Stop dev and test EC2 instances by tag out of hours and start them again. Dry run by default." data-params='[{"k":"REGION","l":"Region","d":"ap-south-1"},{"k":"TAG_NAME","l":"Tag name","d":"env"},{"k":"TAG_VALUE","l":"Tag value","d":"dev"},{"k":"ACTION","l":"Action","t":"select","o":[["Stop","stop"],["Start","start"]],"d":"stop"}]' data-cron="0 20 * * 1-5 /opt/scripts/aws-ec2-power.sh --apply >> /var/log/aws-ec2-power.cron.log 2>&1" data-notes="A stopped instance stops compute charges, but its EBS volumes and Elastic IPs still cost money.|Only instances with the tag are touched. Production instances without it are safe.|Use an IAM role with only ec2:DescribeInstances, ec2:StopInstances and ec2:StartInstances.|AWS also offers Instance Scheduler and EventBridge Scheduler, which do this without a server.">
+#!/usr/bin/env bash
+# Stop or start EC2 instances that carry a tag. DRY RUN unless --apply.
+set -euo pipefail
+
+REGION="{{REGION}}"
+TAG_NAME="{{TAG_NAME}}"
+TAG_VALUE="{{TAG_VALUE}}"
+ACTION="{{ACTION}}"                 # stop or start
+APPLY=0
+if [[ "${1:-}" == "--apply" ]]; then APPLY=1; fi
+
+command -v aws > /dev/null || { echo "aws cli not installed" >&2; exit 1; }
+
+if [[ "$ACTION" == "stop" ]]; then STATE="running"; else STATE="stopped"; fi
+
+read -r -a IDS <<< "$(aws ec2 describe-instances --region "$REGION" \
+  --filters "Name=tag:${TAG_NAME},Values=${TAG_VALUE}" "Name=instance-state-name,Values=${STATE}" \
+  --query 'Reservations[].Instances[].InstanceId' --output text)"
+
+if (( ${#IDS[@]} == 0 )); then echo "no $STATE instances with tag ${TAG_NAME}=${TAG_VALUE} in $REGION"; exit 0; fi
+
+echo "instances to $ACTION:"
+printf '  %s\n' "${IDS[@]}"
+
+if [[ "$APPLY" -eq 1 ]]; then
+  aws ec2 "${ACTION}-instances" --region "$REGION" --instance-ids "${IDS[@]}" --output table
+else
+  echo "(dry run) add --apply to do it"
+fi
+</script>
+
+<script type="text/plain" data-id="idle-resources" data-cat="Cloud Cost" data-title="Find idle cloud resources (FinOps report)" data-file="idle-resources.sh" data-desc="Read-only report of unattached disks, unused public IPs and stopped VMs that still cost money." data-params='[{"k":"CLOUD","l":"Cloud","t":"select","o":[["AWS","aws"],["Azure","azure"]],"d":"aws"},{"k":"REGION","l":"AWS region","d":"ap-south-1"}]' data-cron="0 9 * * 1 /opt/scripts/idle-resources.sh | mail -s &quot;Idle cloud resources&quot; you@example.com" data-notes="Read-only. It only lists resources and deletes nothing. Review each item before you remove it, and snapshot a disk first if unsure.|Unattached disks and unused public IPs are among the most common silent costs.|Run it weekly and send the result to the team. Tag owners on every resource so you know who to ask.|Also check old snapshots, empty load balancers, idle NAT gateways and over-sized instances. Compute Optimizer (AWS) and Advisor (Azure) cover rightsizing.">
+#!/usr/bin/env bash
+# List cloud resources that cost money but do no work. Read-only.
+set -uo pipefail
+
+CLOUD="{{CLOUD}}"                 # aws or azure
+REGION="{{REGION}}"               # used for AWS only
+
+if [[ "$CLOUD" == "aws" ]]; then
+  echo "== unattached EBS volumes (status: available) =="
+  aws ec2 describe-volumes --region "$REGION" --filters Name=status,Values=available \
+    --query 'Volumes[].{ID:VolumeId,SizeGB:Size,Type:VolumeType,Created:CreateTime}' --output table
+
+  echo; echo "== Elastic IPs not associated with anything =="
+  aws ec2 describe-addresses --region "$REGION" \
+    --query 'Addresses[?AssociationId==`null`].{IP:PublicIp,AllocationId:AllocationId}' --output table
+
+  echo; echo "== stopped instances (their disks still cost money) =="
+  aws ec2 describe-instances --region "$REGION" --filters Name=instance-state-name,Values=stopped \
+    --query 'Reservations[].Instances[].{ID:InstanceId,Type:InstanceType,Name:Tags[?Key==`Name`]|[0].Value}' --output table
+else
+  echo "== unattached managed disks =="
+  az disk list --query "[?managedBy==null].{Name:name,RG:resourceGroup,SizeGB:diskSizeGb,Sku:sku.name}" -o table
+
+  echo; echo "== public IPs not attached to anything =="
+  az network public-ip list --query "[?ipConfiguration==null].{Name:name,RG:resourceGroup,Sku:sku.name}" -o table
+
+  echo; echo "== VMs stopped but NOT deallocated (still billed for compute) =="
+  az vm list -d --query "[?powerState=='VM stopped'].{Name:name,RG:resourceGroup,Size:hardwareProfile.vmSize}" -o table
+fi
 </script>
 
 <script>
