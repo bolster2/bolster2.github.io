@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shell Script Library | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css">
+<style>
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.search{flex:1;min-width:200px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:11px 14px;color:var(--tx);font:500 .92rem Inter,sans-serif;outline:none}
+.search:focus{border-color:var(--a)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.chip{background:rgba(255,255,255,.05);border:1px solid var(--bd);color:var(--tx);border-radius:999px;padding:6px 14px;font:600 .76rem Inter,sans-serif;cursor:pointer;transition:.2s}
+.chip:hover{border-color:var(--a)}.chip.on{background:rgba(76,201,240,.15);border-color:var(--a);color:var(--a)}
+.split{display:grid;grid-template-columns:290px 1fr;gap:16px;align-items:start}
+.list{background:var(--card);border:1px solid var(--bd);border-radius:16px;max-height:760px;overflow-y:auto;padding:8px;position:sticky;top:76px}
+.li{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:10px;padding:9px 12px;color:var(--tx);font:600 .84rem Inter,sans-serif;cursor:pointer;transition:.2s}
+.li small{font:500 .6rem 'JetBrains Mono',monospace;color:var(--mut);white-space:nowrap}
+.li:hover{background:rgba(255,255,255,.05)}.li.on{background:rgba(124,92,255,.18);border-color:var(--b)}
+.empty{padding:20px;color:var(--mut);text-align:center;font-size:.9rem}
+.detail{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:22px;min-width:0}
+.detail h2{margin:0 0 4px;padding:0;font-size:1.5rem}.detail h2:before{content:""}
+.dsc{color:var(--mut);margin-bottom:14px}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:6px}
+.fld label{display:block;font:600 .68rem 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--mut);margin-bottom:4px}
+.fld input,.fld select{width:100%;background:var(--code);border:1px solid var(--bd);border-radius:9px;padding:9px 11px;color:var(--tx);font:500 .84rem 'JetBrains Mono',monospace;outline:none}
+.fld input:focus,.fld select:focus{border-color:var(--a)}
+.fld select option{background:#0b1220}
+.fname{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 0}
+.fname code{font-size:.8rem}
+.dl{background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff;border-radius:999px;padding:8px 18px;font:700 .78rem Inter,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(124,92,255,.3)}
+.dl:hover{transform:translateY(-1px)}
+pre#codepre{max-height:520px;overflow:auto;margin:0}
+.c{color:#6f7f9f}
+.box{border-radius:12px;padding:12px 14px;font-size:.86rem;margin-top:12px}
+.box b{display:block;font:700 .65rem 'JetBrains Mono',monospace;letter-spacing:.12em;margin-bottom:6px}
+.box.inst{background:rgba(124,92,255,.08);border-left:3px solid var(--b)}.box.inst b{color:var(--b)}
+.box.nt{background:rgba(247,37,133,.06);border-left:3px solid var(--c)}.box.nt b{color:var(--c)}
+.box ul{margin:4px 0 0 18px}.box li{margin-bottom:3px}
+.box pre{margin:6px 0 0}
+@media(max-width:860px){.split{grid-template-columns:1fr}.list{max-height:240px;position:static}}
+</style></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a><a href="cicd.html">CI/CD</a><a href="autoscaling.html">Autoscaling</a><a href="cloud-services.html">Azure vs AWS</a><a class="on" href="shell-scripts.html">Shell scripts</a></div></nav>
+<main>
+<div class="tag">GUIDE 10 &middot; INTERACTIVE</div>
+<h1>DevOps <span class="grad">shell script</span> library</h1>
+<p class="sub">Ready-to-use Bash scripts for backups, cleanup, file sync, monitoring and deployments. Pick a script, fill in your values, and the code updates live. Copy it or download it as a <code>.sh</code> file.</p>
+
+<div class="bar"><input class="search" id="q" type="search" placeholder="Search: mysql, rsync, logs, docker, ssl..." aria-label="Search scripts"></div>
+<div class="chips" id="cats"></div>
+
+<div class="split">
+ <div class="list" id="list"></div>
+ <div class="detail">
+  <h2 id="dt"></h2>
+  <div class="dsc" id="dd"></div>
+  <div class="form" id="form"></div>
+  <div class="fname"><span>Save as <code id="fn"></code></span><button class="dl" id="dl">&#8595; Download .sh</button></div>
+  <pre id="codepre"><code id="code"></code></pre>
+  <div class="box inst"><b>INSTALL AND SCHEDULE</b><pre id="inst"></pre></div>
+  <div class="box nt"><b>NOTES AND SAFETY</b><ul id="notes"></ul></div>
+ </div>
+</div>
+
+<h2 id="rules">Good habits for every script</h2>
+<ul>
+<li>Start with <code>set -euo pipefail</code>, so the script stops on errors, unset variables and failed pipes.</li>
+<li>Keep passwords out of scripts: use <code>~/.my.cnf</code>, <code>~/.pgpass</code>, environment files or a secret manager, with <code>chmod 600</code>.</li>
+<li>Run destructive scripts as a <b>dry run</b> first, and log what they delete.</li>
+<li>Use <code>flock</code> so two runs never overlap, and send failures to an alert channel.</li>
+<li>A backup you have never restored is not a backup. Test restores on a schedule.</li>
+<li>Lint with <code>shellcheck script.sh</code> before you put anything in cron.</li></ul>
+
+<h2 id="cron">Cron schedule cheat sheet</h2>
+<pre><code># m  h  dom mon dow   command
+  0  2  *   *   *     every day at 02:00
+  */15 * *   *   *     every 15 minutes
+  0  */6 *   *   *     every 6 hours
+  30 1  *   *   0     every Sunday at 01:30
+  0  3  1   *   *     1st of every month at 03:00
+  0  9  *   *   1-5   weekdays at 09:00
+# edit:  crontab -e     list:  crontab -l     system jobs:  /etc/cron.d/
+# always use absolute paths and redirect output:  &gt;&gt; /var/log/job.log 2&gt;&amp;1</code></pre>
+
+<h2 id="oneliners">Handy one-liners</h2>
+<pre><code># biggest directories under /var
+sudo du -xh /var --max-depth=2 2&gt;/dev/null | sort -rh | head -15
+
+# files larger than 100 MB
+sudo find / -xdev -type f -size +100M -printf '%s %p\n' 2&gt;/dev/null | sort -rn | head -20 | numfmt --to=iec --field=1
+
+# who is using a port
+sudo ss -tulpn | grep ':8080'
+
+# top 10 memory / CPU processes
+ps aux --sort=-%mem | head -11
+ps aux --sort=-%cpu | head -11
+
+# find text in logs, last hour of an app log
+grep -i "error" /var/log/app/app.log | tail -50
+journalctl -u myapp --since "1 hour ago" --no-pager | tail -100
+
+# count HTTP status codes in an nginx access log
+awk '{print $9}' /var/log/nginx/access.log | sort | uniq -c | sort -rn
+
+# find and kill a process by name
+pgrep -af node ; pkill -f "node server.js"
+
+# check which cron jobs ran
+grep CRON /var/log/syslog | tail -20
+
+# empty a huge log without deleting the file
+: &gt; /var/log/app/app.log
+
+# quick backup of a file with a timestamp
+cp -a /etc/nginx/nginx.conf /etc/nginx/nginx.conf.$(date +%F_%H%M)</code></pre>
+
+<div class="pager"><a href="cloud-services.html">&larr; Azure vs AWS</a><a href="../index.html#guides">All guides &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+
+<!-- ===================== SCRIPT DATA (raw text) ===================== -->
+
+<script type="text/plain" data-id="mysql-backup" data-cat="Backup" data-title="MySQL / MariaDB backup" data-file="mysql-backup.sh" data-desc="Compressed dump with integrity check, logging, and automatic removal of old backups." data-params='[{"k":"DB_NAME","l":"Database (or ALL)","d":"appdb"},{"k":"BACKUP_DIR","l":"Backup folder","d":"/var/backups/mysql"},{"k":"RETENTION_DAYS","l":"Keep backups (days)","d":"7"}]' data-cron="0 2 * * * /opt/scripts/mysql-backup.sh >> /var/log/mysql-backup.cron.log 2>&1" data-notes="Create a backup-only MySQL user with SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES privileges.|Store credentials in ~/.my.cnf with chmod 600, never in the script.|--single-transaction gives a consistent dump for InnoDB without locking tables.|Retention uses minutes (-mmin) so 7 days means exactly 7 x 24 hours.|Copy backups off the server too (see the S3 and Azure Blob scripts).">
+#!/usr/bin/env bash
+# MySQL / MariaDB backup: dump, compress, verify, prune old files
+set -euo pipefail
+
+DB_NAME="{{DB_NAME}}"            # a database name, or ALL for every database
+BACKUP_DIR="{{BACKUP_DIR}}"
+RETENTION_DAYS={{RETENTION_DAYS}}
+
+# Credentials come from a protected file, never from this script.
+# ~/.my.cnf (chmod 600):
+#   [client]
+#   user=backup
+#   password=YOUR_PASSWORD
+#   host=127.0.0.1
+DEFAULTS_FILE="${DEFAULTS_FILE:-$HOME/.my.cnf}"
+
+TS="$(date +%F_%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+LOG="$BACKUP_DIR/backup.log"
+log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
+
+if [[ "$DB_NAME" == "ALL" ]]; then
+  TARGET=(--all-databases); NAME="all-databases"
+else
+  TARGET=("$DB_NAME"); NAME="$DB_NAME"
+fi
+OUT="$BACKUP_DIR/${NAME}_${TS}.sql.gz"
+OK=0
+
+# remove a half-written file if anything fails
+on_exit() {
+  if [[ "$OK" -ne 1 && -f "$OUT" ]]; then
+    rm -f "$OUT"
+    log "ERROR: backup failed, removed incomplete file"
+  fi
+}
+trap on_exit EXIT
+
+log "start: $NAME"
+mysqldump --defaults-extra-file="$DEFAULTS_FILE" \
+  --single-transaction --quick --routines --triggers --events \
+  "${TARGET[@]}" | gzip -9 > "$OUT"
+
+gzip -t "$OUT"                    # integrity check of the archive
+OK=1
+log "done: $OUT ($(du -h "$OUT" | cut -f1))"
+
+# prune old backups
+find "$BACKUP_DIR" -type f -name "${NAME}_*.sql.gz" \
+  -mmin +"$((RETENTION_DAYS * 1440))" -print -delete \
+  | sed 's/^/deleted old backup: /' | tee -a "$LOG"
+</script>
+
+<script type="text/plain" data-id="pg-backup" data-cat="Backup" data-title="PostgreSQL backup" data-file="pg-backup.sh" data-desc="pg_dump in custom format with verification, optional roles dump, and retention." data-params='[{"k":"DB_NAME","l":"Database","d":"appdb"},{"k":"DB_HOST","l":"Host","d":"127.0.0.1"},{"k":"DB_PORT","l":"Port","d":"5432"},{"k":"DB_USER","l":"User","d":"backup"},{"k":"BACKUP_DIR","l":"Backup folder","d":"/var/backups/postgres"},{"k":"RETENTION_DAYS","l":"Keep backups (days)","d":"7"}]' data-cron="30 2 * * * /opt/scripts/pg-backup.sh >> /var/log/pg-backup.cron.log 2>&1" data-notes="Put the password in ~/.pgpass as host:port:database:user:password and chmod 600 it.|The custom format (-Fc) is compressed and lets pg_restore restore tables selectively and in parallel.|For roles and tablespaces set INCLUDE_GLOBALS=1. That needs a ~/.pgpass line with * as the database and a superuser-capable role.|pg_restore --list proves the file is readable, but still do a real restore test regularly.">
+#!/usr/bin/env bash
+# PostgreSQL backup: custom-format dump, verify, prune old files
+set -euo pipefail
+
+DB_NAME="{{DB_NAME}}"
+DB_HOST="{{DB_HOST}}"
+DB_PORT="{{DB_PORT}}"
+DB_USER="{{DB_USER}}"
+BACKUP_DIR="{{BACKUP_DIR}}"
+RETENTION_DAYS={{RETENTION_DAYS}}
+INCLUDE_GLOBALS="${INCLUDE_GLOBALS:-0}"      # 1 = also dump roles
+
+# Password from ~/.pgpass  (host:port:database:user:password, chmod 600)
+export PGPASSFILE="${PGPASSFILE:-$HOME/.pgpass}"
+
+TS="$(date +%F_%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+LOG="$BACKUP_DIR/backup.log"
+log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
+
+OUT="$BACKUP_DIR/${DB_NAME}_${TS}.dump"
+OK=0
+on_exit() {
+  if [[ "$OK" -ne 1 && -f "$OUT" ]]; then
+    rm -f "$OUT"; log "ERROR: backup failed, removed incomplete file"
+  fi
+}
+trap on_exit EXIT
+
+log "start: $DB_NAME on $DB_HOST:$DB_PORT"
+pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" --no-password \
+  -Fc -f "$OUT" "$DB_NAME"
+
+pg_restore --list "$OUT" > /dev/null       # verify the archive is readable
+OK=1
+log "done: $OUT ($(du -h "$OUT" | cut -f1))"
+
+if [[ "$INCLUDE_GLOBALS" == "1" ]]; then
+  pg_dumpall -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" --no-password --globals-only \
+    | gzip > "$BACKUP_DIR/globals_${TS}.sql.gz"
+  log "roles and globals saved"
+fi
+
+find "$BACKUP_DIR" -type f \( -name "${DB_NAME}_*.dump" -o -name "globals_*.sql.gz" \) \
+  -mmin +"$((RETENTION_DAYS * 1440))" -print -delete \
+  | sed 's/^/deleted old backup: /' | tee -a "$LOG"
+</script>
+
+<script type="text/plain" data-id="mysql-restore" data-cat="Backup" data-title="MySQL restore from backup" data-file="mysql-restore.sh" data-desc="Restore a compressed MySQL dump. Asks for confirmation before it overwrites anything." data-params='[{"k":"DB_NAME","l":"Target database","d":"appdb"},{"k":"BACKUP_DIR","l":"Backup folder","d":"/var/backups/mysql"}]' data-cron="" data-notes="Restore into a test database first, then switch over once you have checked the data.|Pass a file as the first argument to restore a specific backup. Without one, the newest backup is used.|The restore overwrites tables with the same names. Take a fresh backup of the current state first.">
+#!/usr/bin/env bash
+# Restore a MySQL/MariaDB dump (.sql.gz). Usage: ./mysql-restore.sh [backup-file]
+set -euo pipefail
+
+DB_NAME="{{DB_NAME}}"
+BACKUP_DIR="{{BACKUP_DIR}}"
+DEFAULTS_FILE="${DEFAULTS_FILE:-$HOME/.my.cnf}"
+
+FILE="${1:-$(ls -1t "$BACKUP_DIR"/"${DB_NAME}"_*.sql.gz 2>/dev/null | head -1 || true)}"
+[[ -n "$FILE" && -f "$FILE" ]] || { echo "no backup file found" >&2; exit 1; }
+
+gzip -t "$FILE"
+echo "Restore file : $FILE"
+echo "Into database: $DB_NAME  (existing tables with the same names will be replaced)"
+read -r -p "Type YES to continue: " ANSWER
+[[ "$ANSWER" == "YES" ]] || { echo "cancelled"; exit 1; }
+
+mysql --defaults-extra-file="$DEFAULTS_FILE" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`;"
+gunzip -c "$FILE" | mysql --defaults-extra-file="$DEFAULTS_FILE" "$DB_NAME"
+echo "restore complete"
+</script>
+
+<script type="text/plain" data-id="pg-restore" data-cat="Backup" data-title="PostgreSQL restore from backup" data-file="pg-restore.sh" data-desc="Restore a pg_dump custom-format file with parallel jobs and a confirmation prompt." data-params='[{"k":"DB_NAME","l":"Target database","d":"appdb"},{"k":"DB_HOST","l":"Host","d":"127.0.0.1"},{"k":"DB_PORT","l":"Port","d":"5432"},{"k":"DB_USER","l":"User","d":"postgres"},{"k":"BACKUP_DIR","l":"Backup folder","d":"/var/backups/postgres"}]' data-cron="" data-notes="--clean --if-exists drops existing objects before recreating them, so the target data is replaced.|Restore to a new database name first when you only want to check a backup.|-j 4 restores with four parallel jobs and works with the custom format.">
+#!/usr/bin/env bash
+# Restore a PostgreSQL custom-format dump. Usage: ./pg-restore.sh [dump-file]
+set -euo pipefail
+
+DB_NAME="{{DB_NAME}}"
+DB_HOST="{{DB_HOST}}"
+DB_PORT="{{DB_PORT}}"
+DB_USER="{{DB_USER}}"
+BACKUP_DIR="{{BACKUP_DIR}}"
+export PGPASSFILE="${PGPASSFILE:-$HOME/.pgpass}"
+
+FILE="${1:-$(ls -1t "$BACKUP_DIR"/"${DB_NAME}"_*.dump 2>/dev/null | head -1 || true)}"
+[[ -n "$FILE" && -f "$FILE" ]] || { echo "no dump file found" >&2; exit 1; }
+
+pg_restore --list "$FILE" > /dev/null
+echo "Restore file : $FILE"
+echo "Into database: $DB_NAME on $DB_HOST (existing objects will be dropped and recreated)"
+read -r -p "Type YES to continue: " ANSWER
+[[ "$ANSWER" == "YES" ]] || { echo "cancelled"; exit 1; }
+
+createdb -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" --no-password "$DB_NAME" 2>/dev/null || true
+pg_restore -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" --no-password \
+  -d "$DB_NAME" --clean --if-exists --no-owner -j 4 "$FILE"
+echo "restore complete"
+</script>
+
+<script type="text/plain" data-id="cleanup" data-cat="Cleanup" data-title="Delete old files and logs" data-file="cleanup-old-files.sh" data-desc="Remove files older than 48 hours, 7 days, 15 days and so on. Dry run by default." data-params='[{"k":"TARGET_DIR","l":"Folder","d":"/var/log/myapp"},{"k":"PATTERN","l":"File pattern","d":"*.log"},{"k":"AGE","l":"Delete files older than","t":"select","o":[["24 hours","-mmin +1440"],["48 hours","-mmin +2880"],["7 days","-mmin +10080"],["15 days","-mmin +21600"],["30 days","-mmin +43200"]],"d":"-mmin +21600"}]' data-cron="0 3 * * * /opt/scripts/cleanup-old-files.sh --apply >> /var/log/cleanup.cron.log 2>&1" data-notes="Safe by default: with no argument it only lists what would be deleted. Add --apply to delete.|It refuses to run on /, /etc, /var and similar paths, and never crosses filesystems (-xdev).|Age uses minutes (-mmin), so 48 hours is exactly 2880 minutes. -mtime +2 would actually match files 3 days old.|Use PATTERN such as *.log, *.gz, *.tmp or * for everything in the folder.|Set PRUNE_EMPTY_DIRS=1 to also remove folders left empty.">
+#!/usr/bin/env bash
+# Delete old files. DRY RUN unless you pass --apply.
+set -euo pipefail
+
+TARGET_DIR="{{TARGET_DIR}}"
+PATTERN="{{PATTERN}}"
+AGE_ARGS=({{AGE}})                       # find age test
+PRUNE_EMPTY_DIRS="${PRUNE_EMPTY_DIRS:-0}"
+APPLY=0
+if [[ "${1:-}" == "--apply" ]]; then APPLY=1; fi
+
+# safety checks
+case "$TARGET_DIR" in
+  ""|"/"|"/usr"|"/etc"|"/var"|"/home"|"/root"|"/bin"|"/sbin"|"/boot"|"/lib"|"/opt")
+    echo "refusing to run on unsafe path: '$TARGET_DIR'" >&2; exit 1 ;;
+esac
+[[ -d "$TARGET_DIR" ]] || { echo "not a directory: $TARGET_DIR" >&2; exit 1; }
+
+echo "folder : $TARGET_DIR"
+echo "match  : $PATTERN   age: ${AGE_ARGS[*]}"
+
+COUNT=$(find "$TARGET_DIR" -xdev -type f -name "$PATTERN" "${AGE_ARGS[@]}" | wc -l)
+echo "files  : $COUNT"
+
+if [[ "$APPLY" -eq 1 ]]; then
+  find "$TARGET_DIR" -xdev -type f -name "$PATTERN" "${AGE_ARGS[@]}" -print -delete
+  if [[ "$PRUNE_EMPTY_DIRS" == "1" ]]; then
+    find "$TARGET_DIR" -xdev -mindepth 1 -type d -empty -print -delete
+  fi
+  logger -t cleanup "deleted $COUNT files from $TARGET_DIR ($PATTERN)" || true
+  echo "deleted $COUNT files"
+else
+  find "$TARGET_DIR" -xdev -type f -name "$PATTERN" "${AGE_ARGS[@]}" -printf '%TY-%Tm-%Td %TH:%TM  %10s  %p\n' | head -50 || true
+  echo "(dry run) nothing deleted. Run again with --apply to delete."
+fi
+</script>
+
+<script type="text/plain" data-id="log-compress" data-cat="Cleanup" data-title="Compress old logs, then delete older ones" data-file="log-maintenance.sh" data-desc="A two-step log policy: gzip logs after a few days, delete archives after a longer period." data-params='[{"k":"LOG_DIR","l":"Log folder","d":"/var/log/myapp"},{"k":"COMPRESS_AFTER_DAYS","l":"Compress after (days)","d":"2"},{"k":"DELETE_AFTER_DAYS","l":"Delete after (days)","d":"30"}]' data-cron="15 3 * * * /opt/scripts/log-maintenance.sh >> /var/log/log-maintenance.cron.log 2>&1" data-notes="Do not compress a log that the application is still writing to. Rotate it first, or use logrotate with copytruncate.|For system and nginx logs, logrotate is usually the better tool. This script suits custom app log folders.|Deleting uses minutes, so 30 days is exactly 43200 minutes.">
+#!/usr/bin/env bash
+# Compress logs older than N days, delete archives older than M days
+set -euo pipefail
+
+LOG_DIR="{{LOG_DIR}}"
+COMPRESS_AFTER_DAYS={{COMPRESS_AFTER_DAYS}}
+DELETE_AFTER_DAYS={{DELETE_AFTER_DAYS}}
+
+[[ -d "$LOG_DIR" && "$LOG_DIR" != "/" ]] || { echo "bad log dir: $LOG_DIR" >&2; exit 1; }
+
+# 1. compress plain logs that have not changed for a while
+find "$LOG_DIR" -xdev -type f -name "*.log" \
+  -mmin +"$((COMPRESS_AFTER_DAYS * 1440))" -exec gzip -f {} \;
+
+# 2. delete old archives
+find "$LOG_DIR" -xdev -type f \( -name "*.gz" -o -name "*.log.[0-9]*" \) \
+  -mmin +"$((DELETE_AFTER_DAYS * 1440))" -print -delete
+
+echo "log maintenance finished for $LOG_DIR"
+du -sh "$LOG_DIR"
+</script>
+
+<script type="text/plain" data-id="rsync-host" data-cat="Sync and Transfer" data-title="rsync files to another host" data-file="rsync-to-host.sh" data-desc="Sync a folder to a remote server over SSH with locking, logging and a dry-run mode." data-params='[{"k":"SRC_DIR","l":"Source folder (trailing / = contents)","d":"/var/www/html/"},{"k":"DEST_USER","l":"Remote user","d":"deploy"},{"k":"DEST_HOST","l":"Remote host","d":"10.0.2.15"},{"k":"DEST_DIR","l":"Remote folder","d":"/var/www/html/"},{"k":"SSH_KEY","l":"SSH key","d":"~/.ssh/id_ed25519"},{"k":"SSH_PORT","l":"SSH port","d":"22"}]' data-cron="*/30 * * * * /opt/scripts/rsync-to-host.sh --apply >> /var/log/rsync-sync.cron.log 2>&1" data-notes="Dry run by default. It prints what would change. Add --apply to copy for real.|A trailing slash on the source copies the contents. Without it you get a folder inside the destination.|DELETE_EXTRA=1 makes an exact mirror and removes files on the destination that are gone from the source. Use it with care and dry-run first.|flock stops two runs overlapping when a sync takes longer than the cron interval.|Set up key login first: ssh-copy-id -i KEY user@host. Use BWLIMIT=2000 to cap speed in KB/s.">
+#!/usr/bin/env bash
+# rsync a folder to another host over SSH. DRY RUN unless --apply.
+set -euo pipefail
+
+SRC_DIR="{{SRC_DIR}}"
+DEST_USER="{{DEST_USER}}"
+DEST_HOST="{{DEST_HOST}}"
+DEST_DIR="{{DEST_DIR}}"
+SSH_KEY="{{SSH_KEY}}"
+SSH_PORT="{{SSH_PORT}}"
+DELETE_EXTRA="${DELETE_EXTRA:-0}"       # 1 = mirror (delete files missing at source)
+BWLIMIT="${BWLIMIT:-0}"                 # KB/s, 0 = unlimited
+EXCLUDES=(--exclude='*.tmp' --exclude='.git/' --exclude='node_modules/' --exclude='*.swp')
+
+# prevent overlapping runs
+LOCK="/tmp/rsync-$(echo "$SRC_DIR$DEST_HOST" | tr -c 'A-Za-z0-9' '_').lock"
+exec 9>"$LOCK"
+flock -n 9 || { echo "another sync is already running"; exit 1; }
+
+LOG="${LOG:-$HOME/rsync-$(date +%F).log}"
+OPTS=(-aHz --partial --human-readable --stats
+      -e "ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o BatchMode=yes")
+if [[ "$DELETE_EXTRA" == "1" ]]; then OPTS+=(--delete); fi
+if [[ "$BWLIMIT" != "0" ]];      then OPTS+=(--bwlimit="$BWLIMIT"); fi
+if [[ "${1:-}" != "--apply" ]]; then
+  OPTS+=(--dry-run --itemize-changes)
+  echo "DRY RUN: showing what would be copied (use --apply to copy)"
+fi
+
+echo "$(date '+%F %T') sync $SRC_DIR -> $DEST_USER@$DEST_HOST:$DEST_DIR" | tee -a "$LOG" >/dev/null
+rsync "${OPTS[@]}" "${EXCLUDES[@]}" "$SRC_DIR" "$DEST_USER@$DEST_HOST:$DEST_DIR" 2>&1 | tee -a "$LOG"
+echo "finished, log: $LOG"
+</script>
+
+<script type="text/plain" data-id="s3-upload" data-cat="Sync and Transfer" data-title="Upload backups to AWS S3" data-file="backup-to-s3.sh" data-desc="Copy backup files to an S3 bucket using the cheaper infrequent-access storage class." data-params='[{"k":"BACKUP_DIR","l":"Local backup folder","d":"/var/backups"},{"k":"BUCKET","l":"S3 bucket","d":"my-company-backups"},{"k":"PREFIX","l":"Prefix (folder in bucket)","d":"prod/db"}]' data-cron="30 3 * * * /opt/scripts/backup-to-s3.sh >> /var/log/backup-to-s3.cron.log 2>&1" data-notes="Use an IAM role on the server (instance profile) instead of access keys when you can.|Give the role only s3:PutObject and s3:ListBucket on this bucket.|Add an S3 lifecycle rule to expire or archive old objects, so storage cost stays under control.|aws s3 sync only copies new or changed files and does not delete anything from the bucket here.">
+#!/usr/bin/env bash
+# Upload backup files to S3
+set -euo pipefail
+
+BACKUP_DIR="{{BACKUP_DIR}}"
+BUCKET="{{BUCKET}}"
+PREFIX="{{PREFIX}}"
+
+command -v aws >/dev/null || { echo "aws cli not installed" >&2; exit 1; }
+[[ -d "$BACKUP_DIR" ]] || { echo "missing folder: $BACKUP_DIR" >&2; exit 1; }
+
+aws s3 sync "$BACKUP_DIR" "s3://$BUCKET/$PREFIX/" \
+  --exclude "*" --include "*.gz" --include "*.dump" --include "*.tar" \
+  --storage-class STANDARD_IA --only-show-errors
+
+echo "uploaded to s3://$BUCKET/$PREFIX/"
+aws s3 ls "s3://$BUCKET/$PREFIX/" --human-readable | tail -5
+</script>
+
+<script type="text/plain" data-id="blob-upload" data-cat="Sync and Transfer" data-title="Upload backups to Azure Blob Storage" data-file="backup-to-blob.sh" data-desc="Copy backup files to an Azure storage container, signing in with a managed identity or az login." data-params='[{"k":"BACKUP_DIR","l":"Local backup folder","d":"/var/backups"},{"k":"ACCOUNT","l":"Storage account","d":"mystorageaccount"},{"k":"CONTAINER","l":"Container","d":"db-backups"},{"k":"PREFIX","l":"Folder in container","d":"prod"}]' data-cron="45 3 * * * /opt/scripts/backup-to-blob.sh >> /var/log/backup-to-blob.cron.log 2>&1" data-notes="On an Azure VM, enable a managed identity and run az login --identity once. No keys are stored.|Give the identity the Storage Blob Data Contributor role on the container.|Set a lifecycle management policy on the storage account to move old backups to Cool or Archive and delete them later.|--overwrite false skips blobs that already exist, so reruns are cheap.">
+#!/usr/bin/env bash
+# Upload backup files to Azure Blob Storage
+set -euo pipefail
+
+BACKUP_DIR="{{BACKUP_DIR}}"
+ACCOUNT="{{ACCOUNT}}"
+CONTAINER="{{CONTAINER}}"
+PREFIX="{{PREFIX}}"
+
+command -v az >/dev/null || { echo "az cli not installed" >&2; exit 1; }
+[[ -d "$BACKUP_DIR" ]] || { echo "missing folder: $BACKUP_DIR" >&2; exit 1; }
+
+# sign in with the VM managed identity if no session exists
+az account show >/dev/null 2>&1 || az login --identity --output none
+
+az storage blob upload-batch \
+  --account-name "$ACCOUNT" \
+  --destination "$CONTAINER" \
+  --destination-path "$PREFIX" \
+  --source "$BACKUP_DIR" \
+  --pattern "*.gz" \
+  --auth-mode login \
+  --overwrite false \
+  --tier Cool \
+  --output none
+
+echo "uploaded to $ACCOUNT/$CONTAINER/$PREFIX"
+</script>
+
+<script type="text/plain" data-id="disk-alert" data-cat="Monitoring" data-title="Disk space alert" data-file="disk-alert.sh" data-desc="Warn when any disk passes a usage threshold, with an optional Slack or Teams style webhook." data-params='[{"k":"THRESHOLD","l":"Alert at usage (%)","d":"85"},{"k":"WEBHOOK_URL","l":"Webhook URL (optional)","d":""}]' data-cron="*/10 * * * * /opt/scripts/disk-alert.sh >> /var/log/disk-alert.cron.log 2>&1" data-notes="Leave the webhook empty to only print and log the alert.|The JSON body uses a text field, which Slack incoming webhooks accept. Teams and others may need a different payload.|Keep the webhook URL out of version control. Load it from an environment file instead.|Add inode checks with df -i if you see no space left errors while df -h looks fine.">
+#!/usr/bin/env bash
+# Alert when a filesystem is almost full
+set -euo pipefail
+
+THRESHOLD={{THRESHOLD}}
+WEBHOOK_URL="{{WEBHOOK_URL}}"
+HOST="$(hostname)"
+
+df -P -x tmpfs -x devtmpfs -x overlay -x squashfs | awk 'NR>1 {gsub("%","",$5); print $5, $6}' |
+while read -r pct mount; do
+  if (( pct >= THRESHOLD )); then
+    MSG="[$HOST] disk $mount is ${pct}% full (threshold ${THRESHOLD}%)"
+    echo "$MSG"
+    logger -t disk-alert "$MSG" || true
+    if [[ -n "$WEBHOOK_URL" ]]; then
+      curl -fsS -X POST -H 'Content-Type: application/json' \
+        -d "{\"text\":\"$MSG\"}" "$WEBHOOK_URL" > /dev/null || true
+    fi
+  fi
+done
+</script>
+
+<script type="text/plain" data-id="watchdog" data-cat="Monitoring" data-title="Service watchdog (auto-restart)" data-file="service-watchdog.sh" data-desc="Check a systemd service and restart it if it is down, with logging." data-params='[{"k":"SERVICE","l":"Service name","d":"nginx"}]' data-cron="* * * * * /opt/scripts/service-watchdog.sh >> /var/log/service-watchdog.cron.log 2>&1" data-notes="Run from root crontab or give the user permission to restart the service.|This is a safety net, not a fix. Look into why the service stopped, using journalctl -u SERVICE.|Prefer Restart=on-failure in the systemd unit for real services. Use this for ones you cannot change.">
+#!/usr/bin/env bash
+# Restart a systemd service if it is not running
+set -euo pipefail
+
+SERVICE="{{SERVICE}}"
+
+if systemctl is-active --quiet "$SERVICE"; then
+  exit 0
+fi
+
+logger -t watchdog "$SERVICE is down, restarting" || true
+echo "$(date '+%F %T') $SERVICE is down, restarting"
+systemctl restart "$SERVICE"
+sleep 5
+
+if systemctl is-active --quiet "$SERVICE"; then
+  echo "$(date '+%F %T') $SERVICE recovered"
+else
+  echo "$(date '+%F %T') $SERVICE FAILED to restart" >&2
+  journalctl -u "$SERVICE" -n 20 --no-pager >&2
+  exit 1
+fi
+</script>
+
+<script type="text/plain" data-id="http-check" data-cat="Monitoring" data-title="HTTP health check with retries" data-file="http-health-check.sh" data-desc="Check that a URL returns success, retry a few times, and exit non-zero so cron or CI can alert." data-params='[{"k":"URL","l":"URL to check","d":"https://example.com/health"},{"k":"RETRIES","l":"Retries","d":"3"},{"k":"TIMEOUT","l":"Timeout (seconds)","d":"5"}]' data-cron="*/5 * * * * /opt/scripts/http-health-check.sh || echo failed" data-notes="Exit code 0 means healthy and 1 means unhealthy. That makes it easy to use in pipelines and deploy scripts.|curl -f treats HTTP errors (4xx and 5xx) as failures.|Chain an alert after it, for example: ./http-health-check.sh || ./disk-alert.sh">
+#!/usr/bin/env bash
+# Check a URL, retry, and report. Exit 0 = healthy, 1 = unhealthy
+set -uo pipefail
+
+URL="{{URL}}"
+RETRIES={{RETRIES}}
+TIMEOUT={{TIMEOUT}}
+
+for ((i = 1; i <= RETRIES; i++)); do
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$TIMEOUT" "$URL" || true)
+  if [[ "$CODE" =~ ^2|^3 ]]; then
+    echo "$(date '+%F %T') OK   $URL ($CODE)"
+    exit 0
+  fi
+  echo "$(date '+%F %T') FAIL $URL (code: ${CODE:-none}) attempt $i/$RETRIES"
+  sleep 3
+done
+
+exit 1
+</script>
+
+<script type="text/plain" data-id="ssl-expiry" data-cat="Monitoring" data-title="SSL certificate expiry check" data-file="ssl-expiry-check.sh" data-desc="Check how many days remain on certificates for one or more domains, and warn before they expire." data-params='[{"k":"HOSTS","l":"Domains (space separated)","d":"example.com www.example.com"},{"k":"WARN_DAYS","l":"Warn when fewer than (days)","d":"21"}]' data-cron="0 8 * * * /opt/scripts/ssl-expiry-check.sh >> /var/log/ssl-expiry.cron.log 2>&1" data-notes="Uses GNU date, so it works on Linux. On macOS install coreutils and use gdate.|Exit code 2 means at least one certificate is close to expiry, so cron or monitoring can alert on it.|If you use Lets Encrypt, also check that the renewal timer is active: systemctl list-timers | grep certbot.">
+#!/usr/bin/env bash
+# Warn when TLS certificates are close to expiry
+set -uo pipefail
+
+HOSTS="{{HOSTS}}"
+WARN_DAYS={{WARN_DAYS}}
+PORT=443
+STATUS=0
+
+for HOST in $HOSTS; do
+  END=$(echo | openssl s_client -servername "$HOST" -connect "$HOST:$PORT" 2>/dev/null \
+        | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+  if [[ -z "$END" ]]; then
+    echo "ERROR  $HOST: could not read certificate"; STATUS=2; continue
+  fi
+  DAYS=$(( ( $(date -d "$END" +%s) - $(date +%s) ) / 86400 ))
+  if (( DAYS < WARN_DAYS )); then
+    echo "WARN   $HOST expires in $DAYS days ($END)"; STATUS=2
+  else
+    echo "OK     $HOST expires in $DAYS days"
+  fi
+done
+
+exit $STATUS
+</script>
+
+<script type="text/plain" data-id="docker-clean" data-cat="Docker and K8s" data-title="Docker cleanup" data-file="docker-cleanup.sh" data-desc="Remove stopped containers, unused images and build cache older than a chosen age." data-params='[{"k":"HOURS","l":"Remove items older than (hours)","t":"select","o":[["24 hours","24"],["48 hours","48"],["7 days","168"],["15 days","360"],["30 days","720"]],"d":"168"}]' data-cron="0 4 * * 0 /opt/scripts/docker-cleanup.sh >> /var/log/docker-cleanup.cron.log 2>&1" data-notes="image prune -a removes every image not used by a container, including tagged ones that are older than the age filter. They get pulled again when needed.|Volumes are not touched. Pruning volumes can destroy data, so it is left out on purpose.|Check disk use before and after with docker system df.">
+#!/usr/bin/env bash
+# Clean up old Docker objects. Volumes are never touched.
+set -euo pipefail
+
+HOURS={{HOURS}}
+
+echo "before:"; docker system df
+echo
+
+docker container prune -f --filter "until=${HOURS}h"
+docker image prune -a -f --filter "until=${HOURS}h"
+docker builder prune -f --filter "until=${HOURS}h"
+# docker network prune -f           # optional: unused networks
+# docker volume prune -f            # DANGER: can delete data, so off by default
+
+echo; echo "after:"; docker system df
+</script>
+
+<script type="text/plain" data-id="k8s-clean" data-cat="Docker and K8s" data-title="Kubernetes: clean failed and completed pods" data-file="k8s-clean-pods.sh" data-desc="List, then delete, pods in Failed (for example Evicted) or Succeeded state." data-params='[{"k":"NAMESPACE","l":"Namespace (or all)","d":"all"}]' data-cron="" data-notes="Dry run by default. Add --apply to delete.|Evicted pods are in the Failed phase. They stay around until deleted and clutter kubectl get pods.|Pods owned by a Job or Deployment are recreated as needed. Completed Job pods may be wanted for logs, so check first.|Needs a kubeconfig with delete rights on pods.">
+#!/usr/bin/env bash
+# Delete Failed (evicted) and Succeeded pods. DRY RUN unless --apply.
+set -euo pipefail
+
+NAMESPACE="{{NAMESPACE}}"      # a namespace name, or "all"
+APPLY=0
+if [[ "${1:-}" == "--apply" ]]; then APPLY=1; fi
+
+if [[ "$NAMESPACE" == "all" ]]; then NS_ARGS=(-A); else NS_ARGS=(-n "$NAMESPACE"); fi
+
+for PHASE in Failed Succeeded; do
+  echo "== pods in phase $PHASE =="
+  kubectl get pods "${NS_ARGS[@]}" --field-selector="status.phase=$PHASE" --no-headers 2>/dev/null || true
+  if [[ "$APPLY" -eq 1 ]]; then
+    kubectl delete pods "${NS_ARGS[@]}" --field-selector="status.phase=$PHASE"
+  fi
+done
+
+if [[ "$APPLY" -eq 0 ]]; then echo; echo "(dry run) add --apply to delete these pods"; fi
+</script>
+
+<script type="text/plain" data-id="node-deploy" data-cat="Deploy" data-title="Node.js deploy with PM2 and rollback" data-file="deploy-node-app.sh" data-desc="Pull the latest code, install, reload with PM2, check health, and roll back automatically on failure." data-params='[{"k":"APP_DIR","l":"App folder","d":"/var/www/myapp"},{"k":"BRANCH","l":"Git branch","d":"main"},{"k":"PM2_NAME","l":"PM2 process name","d":"myapp"},{"k":"PORT","l":"App port","d":"3000"}]' data-cron="" data-notes="Run it as the user that owns the app folder, not root.|git reset --hard on rollback discards local edits in the app folder, which is what you want on a deploy target.|The app needs a /health route that returns 200. Change the URL in the script if yours differs.|For bigger setups use a CI/CD pipeline (see the CI/CD guide). This script suits a single VM.">
+#!/usr/bin/env bash
+# Deploy a Node.js app managed by PM2, with health check and rollback
+set -euo pipefail
+
+APP_DIR="{{APP_DIR}}"
+BRANCH="{{BRANCH}}"
+PM2_NAME="{{PM2_NAME}}"
+PORT="{{PORT}}"
+
+cd "$APP_DIR"
+PREV="$(git rev-parse HEAD)"
+echo "current version: $PREV"
+
+git fetch --all --prune
+git checkout "$BRANCH"
+git pull --ff-only origin "$BRANCH"
+NEW="$(git rev-parse HEAD)"
+
+if [[ "$PREV" == "$NEW" ]]; then echo "already up to date ($NEW)"; fi
+
+npm ci --omit=dev
+# npm run build                      # uncomment for apps with a build step
+
+if pm2 describe "$PM2_NAME" > /dev/null 2>&1; then
+  pm2 reload "$PM2_NAME" --update-env
+else
+  pm2 start npm --name "$PM2_NAME" -- start
+fi
+
+echo "checking health..."
+if curl -fsS --retry 6 --retry-delay 3 --retry-connrefused "http://localhost:${PORT}/health" > /dev/null; then
+  echo "deployed $NEW"
+  pm2 save > /dev/null
+else
+  echo "health check FAILED, rolling back to $PREV" >&2
+  git reset --hard "$PREV"
+  npm ci --omit=dev
+  pm2 reload "$PM2_NAME" --update-env
+  exit 1
+fi
+</script>
+
+<script type="text/plain" data-id="sysreport" data-cat="Monitoring" data-title="Quick server health report" data-file="server-report.sh" data-desc="One screen of key facts: uptime, load, memory, disks, top processes, failed services and recent errors." data-params='[]' data-cron="0 7 * * 1-5 /opt/scripts/server-report.sh | mail -s &quot;Server report&quot; you@example.com" data-notes="Read-only, so it is safe to run on any server.|Pipe it to mail, save it to a file, or paste it into an incident ticket.|Failed services and recent error lines are often the fastest clue during an incident.">
+#!/usr/bin/env bash
+# Read-only server health snapshot
+set -uo pipefail
+
+line() { printf '\n== %s ==\n' "$1"; }
+
+line "HOST";        hostname -f; uptime
+line "OS";          grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '"'; uname -r
+line "LOAD / CPU";  nproc | sed 's/^/cpu cores: /'; cat /proc/loadavg
+line "MEMORY";      free -h
+line "DISK USAGE";  df -hT -x tmpfs -x devtmpfs -x overlay
+line "INODES";      df -i -x tmpfs -x devtmpfs -x overlay | awk 'NR==1 || $5+0 > 50'
+line "TOP 5 BY MEMORY"; ps aux --sort=-%mem | head -6
+line "TOP 5 BY CPU";    ps aux --sort=-%cpu | head -6
+line "LISTENING PORTS"; ss -tulpn 2>/dev/null | head -20
+line "FAILED SERVICES"; systemctl --failed --no-legend 2>/dev/null || echo "systemctl not available"
+line "RECENT ERRORS";   journalctl -p err -n 15 --no-pager 2>/dev/null || true
+line "LOGGED IN";       who
+</script>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const S=[...document.querySelectorAll('script[type="text/plain"][data-id]')].map(e=>({
+  id:e.dataset.id,cat:e.dataset.cat,title:e.dataset.title,desc:e.dataset.desc,file:e.dataset.file,
+  params:JSON.parse(e.dataset.params||"[]"),cron:(e.dataset.cron||"").replace(/&quot;/g,'"'),
+  notes:(e.dataset.notes||"").split("|").filter(Boolean),
+  body:e.textContent.replace(/^\n/,"").replace(/\s+$/,"")+"\n"}));
+const CATS=["All"].concat([...new Set(S.map(s=>s.cat))]);
+const st={cat:"All",q:"",sel:S[0].id,vals:{}};
+const byId=id=>S.find(s=>s.id===id);
+function vals(s){if(!st.vals[s.id]){st.vals[s.id]={};s.params.forEach(p=>st.vals[s.id][p.k]=p.d)}return st.vals[s.id]}
+function build(s){const v=vals(s);return s.body.replace(/\{\{(\w+)\}\}/g,(m,k)=>(k in v?v[k]:m))}
+function hl(text){
+  return text.split("\n").map(l=>{
+    const e=esc(l);
+    if(/^\s*#/.test(l))return '<span class="c">'+e+'</span>';
+    const m=l.match(/^(.*?\S)(\s{2,}#.*)$/);
+    if(m)return esc(m[1])+'<span class="c">'+esc(m[2])+'</span>';
+    return e}).join("\n")}
+function filtered(){const q=st.q.trim().toLowerCase();return S.filter(s=>(st.cat==="All"||s.cat===st.cat)&&(!q||(s.title+" "+s.desc+" "+s.cat+" "+s.body).toLowerCase().includes(q)))}
+function renderCats(){$("cats").innerHTML=CATS.map(c=>'<button class="chip'+(st.cat===c?" on":"")+'" data-cat="'+esc(c)+'">'+esc(c)+'</button>').join("")}
+function renderList(){const f=filtered();$("list").innerHTML=f.length?f.map(s=>'<button class="li'+(s.id===st.sel?" on":"")+'" data-id="'+s.id+'"><span>'+esc(s.title)+'</span><small>'+esc(s.cat)+'</small></button>').join(""):'<div class="empty">No script matches. Try another word.</div>'}
+function renderCode(){const s=byId(st.sel);$("code").innerHTML=hl(build(s))}
+function renderDetail(){
+  const s=byId(st.sel),v=vals(s);
+  $("dt").textContent=s.title;$("dd").textContent=s.desc;$("fn").textContent=s.file;
+  $("form").innerHTML=s.params.map(p=>{
+    if(p.t==="select")return '<div class="fld"><label>'+esc(p.l)+'</label><select data-k="'+p.k+'">'+p.o.map(o=>'<option value="'+esc(o[1])+'"'+(o[1]===v[p.k]?" selected":"")+'>'+esc(o[0])+'</option>').join("")+'</select></div>';
+    return '<div class="fld"><label>'+esc(p.l)+'</label><input type="text" data-k="'+p.k+'" value="'+esc(v[p.k])+'" spellcheck="false" autocomplete="off"></div>'}).join("");
+  $("form").style.display=s.params.length?"":"none";
+  renderCode();
+  let inst='sudo install -m 750 '+s.file+' /opt/scripts/'+s.file+'   # copy and make it executable\n/opt/scripts/'+s.file+'                    # run it once by hand to test';
+  if(s.cron)inst+='\n\n# schedule it: crontab -e, then add\n'+s.cron;
+  $("inst").textContent=inst;
+  $("notes").innerHTML=s.notes.map(n=>'<li>'+esc(n)+'</li>').join("");
+}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button");if(!t)return;
+  if(t.dataset.cat){st.cat=t.dataset.cat;const f=filtered();if(f.length&&!f.some(s=>s.id===st.sel)){st.sel=f[0].id;renderDetail()}renderCats();renderList();return}
+  if(t.classList.contains("li")){st.sel=t.dataset.id;renderList();renderDetail();return}
+  if(t.id==="dl"){const s=byId(st.sel),b=new Blob([build(s)],{type:"text/x-shellscript"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=s.file;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
+});
+$("form").addEventListener("input",e=>{const k=e.target.dataset.k;if(!k)return;vals(byId(st.sel))[k]=e.target.value;renderCode()});
+$("q").addEventListener("input",e=>{st.q=e.target.value;if(st.q.trim()&&st.cat!=="All"){st.cat="All";renderCats()}const f=filtered();if(f.length&&!f.some(s=>s.id===st.sel)){st.sel=f[0].id;renderDetail()}renderList()});
+renderCats();renderList();renderDetail();
+})();
+</script>
+<script src="guide.js"></script>
+</body></html>
