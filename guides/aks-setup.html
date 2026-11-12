@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AKS Setup + GitHub Actions: Complete Guide | Himansu Kumar Behera</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css">
+<style>
+main{counter-reset:phase}
+h2.ph{counter-increment:phase}
+h2.ph:before{content:"Part " counter(phase) " \00b7 ";color:var(--b);font-family:'JetBrains Mono',monospace;font-size:.7em}
+.step{display:flex;align-items:center;gap:10px;margin:30px 0 8px;cursor:pointer;user-select:none}
+.step h3{margin:0;color:var(--tx);font-size:1.08rem}
+.step .no{font:700 .72rem 'JetBrains Mono',monospace;color:var(--a);border:1px solid var(--a);border-radius:6px;padding:2px 7px;white-space:nowrap}
+.step .tick{margin-left:auto;width:22px;height:22px;border:2px solid var(--bd);border-radius:6px;flex:0 0 auto;display:grid;place-items:center;transition:.2s}
+.step.done .tick{background:#2de2a6;border-color:#2de2a6}
+.step.done .tick:after{content:"\2713";color:#04201a;font-weight:800;font-size:.8rem}
+.step.done h3{color:var(--mut);text-decoration:line-through;text-decoration-color:rgba(139,151,179,.5)}
+.why{color:var(--mut);font-size:.9rem;margin:-2px 0 10px}
+figure.shot{margin:14px 0 18px}
+figure.shot img{display:block;width:100%;border:1px solid var(--bd);border-radius:12px;cursor:zoom-in;background:#0b1220}
+figure.shot figcaption{font-size:.78rem;color:var(--mut);margin-top:6px}
+.ph-box{border:1.5px dashed rgba(76,201,240,.45);border-radius:12px;background:repeating-linear-gradient(45deg,rgba(76,201,240,.04),rgba(76,201,240,.04) 10px,transparent 10px,transparent 20px);padding:22px 18px;display:flex;gap:14px;align-items:flex-start}
+.ph-box svg{flex:0 0 auto;color:var(--a)}
+.ph-box b{display:block;font-size:.88rem;margin-bottom:3px}
+.ph-box span{display:block;font-size:.8rem;color:var(--mut);line-height:1.5}
+.ph-box code{font-size:.74rem}
+details{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:4px 16px;margin:12px 0}
+details summary{cursor:pointer;padding:10px 0;font-weight:700;font-size:.92rem;color:var(--a)}
+details[open] summary{border-bottom:1px solid var(--bd);margin-bottom:10px}
+details ol{margin-bottom:10px}
+.diagram{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:10px;margin:16px 0;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:640px;height:auto}
+.diagram figcaption{font-size:.78rem;color:var(--mut);padding:6px 8px 2px}
+.prog{position:sticky;top:60px;z-index:20;background:rgba(7,11,22,.9);backdrop-filter:blur(10px);border:1px solid var(--bd);border-radius:12px;padding:8px 14px;display:flex;gap:12px;align-items:center;font-size:.8rem;color:var(--mut);margin:10px 0 0}
+.prog .bar{flex:1;height:6px;background:rgba(255,255,255,.08);border-radius:9px;overflow:hidden}
+.prog .bar u{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a),var(--b));transition:width .3s}
+.prog button{background:none;border:1px solid var(--bd);color:var(--mut);border-radius:8px;padding:3px 10px;font:600 .72rem Inter,sans-serif;cursor:pointer}
+.kv{display:grid;grid-template-columns:200px 1fr;gap:6px 14px;font-size:.88rem;margin:10px 0}
+.kv div:nth-child(odd){color:var(--tx);font-weight:600}
+.kv div:nth-child(even){color:#b9c3dc}
+@media(max-width:600px){.kv{grid-template-columns:1fr}}
+#lb{position:fixed;inset:0;background:rgba(3,6,14,.92);display:none;align-items:center;justify-content:center;z-index:100;cursor:zoom-out;padding:20px}
+#lb img{max-width:100%;max-height:100%;border-radius:10px}
+</style></head><body>
+<div id="prog"></div><canvas id="bg"></canvas>
+<nav><a class="logo grad" href="../index.html">&lt;HKB/&gt;</a><div class="links"><a href="../index.html#guides">All guides</a><a href="ansible.html">Ansible</a><a href="terraform.html">Terraform</a><a href="kubernetes.html">Kubernetes</a><a href="aca-aks.html">ACA &amp; AKS</a><a href="docker.html">Docker</a><a href="linux-migration.html">Migration</a><a href="cicd.html">CI/CD</a><a href="autoscaling.html">Autoscaling</a><a href="cloud-services.html">Azure vs AWS</a><a href="shell-scripts.html">Shell scripts</a><a class="on" href="aks-setup.html">AKS setup</a></div></nav>
+<main>
+<div class="tag">GUIDE 11 &middot; COMPLETE WALKTHROUGH</div>
+<h1>Set up <span class="grad">Azure Kubernetes Service</span> and deploy with GitHub Actions</h1>
+<p class="sub">Every micro step, from an empty subscription to a pipeline that builds, pushes and deploys an app on AKS. Do it with the CLI (fast, repeatable) or follow the Portal steps. Tick each step off as you go.</p>
+
+<div class="note ok"><b>About the screenshots:</b> each step has a screenshot slot. Real portal screenshots contain your own subscription details, so they are not bundled. Save yours with the file name shown in the slot, and it appears here automatically. The full list is in <a href="#shots">the screenshot checklist</a>. The diagrams are drawn illustrations, not captures.</div>
+
+<div class="prog" id="progress"><span id="pt">0 of 0 steps done</span><div class="bar"><u id="pb"></u></div><button id="reset">Reset</button></div>
+
+<div class="toc"><b>ON THIS PAGE</b><ol>
+<li><a href="#overview">What you will build</a></li>
+<li><a href="#prereq">Prerequisites and tools</a></li>
+<li><a href="#vars">Variables, sign-in and resource group</a></li>
+<li><a href="#acr">Container registry (ACR)</a></li>
+<li><a href="#plan">Plan the cluster: nodes and networking</a></li>
+<li><a href="#create">Create the AKS cluster</a></li>
+<li><a href="#access">Give yourself access and connect with kubectl</a></li>
+<li><a href="#nodes">Node pools: system and user</a></li>
+<li><a href="#ingress">Ingress controller and namespace</a></li>
+<li><a href="#pods">Pod setup: deploy the app</a></li>
+<li><a href="#gha">Connect GitHub Actions</a></li>
+<li><a href="#run">Run the pipeline and verify</a></li>
+<li><a href="#day2">Day-2: upgrades, cost, cleanup</a></li>
+<li><a href="#trouble">Troubleshooting</a></li>
+<li><a href="#shots">Screenshot checklist</a></li></ol></div>
+
+<h2 id="overview" class="ph">What you will build</h2>
+<figure class="diagram">
+<svg viewBox="0 0 960 360" role="img" aria-label="Architecture: GitHub Actions builds an image, pushes to ACR and deploys to AKS behind an ingress load balancer" font-family="Inter,sans-serif" font-size="12">
+ <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8b97b3"/></marker></defs>
+ <rect x="10" y="20" width="200" height="130" rx="14" fill="#0f1830" stroke="#4cc9f0" stroke-opacity=".5"/>
+ <text x="110" y="44" text-anchor="middle" fill="#4cc9f0" font-weight="700">GitHub</text>
+ <rect x="28" y="56" width="164" height="34" rx="8" fill="#16213f" stroke="#2a3a66"/><text x="110" y="78" text-anchor="middle" fill="#e7ecf7">Repository (app + k8s)</text>
+ <rect x="28" y="100" width="164" height="34" rx="8" fill="#16213f" stroke="#2a3a66"/><text x="110" y="122" text-anchor="middle" fill="#e7ecf7">Actions workflow</text>
+ <rect x="10" y="190" width="200" height="60" rx="14" fill="#0f1830" stroke="#7c5cff" stroke-opacity=".6"/>
+ <text x="110" y="214" text-anchor="middle" fill="#b5a4ff" font-weight="700">Microsoft Entra ID</text><text x="110" y="234" text-anchor="middle" fill="#8b97b3">OIDC trust, no secrets</text>
+ <rect x="270" y="20" width="170" height="70" rx="14" fill="#0f1830" stroke="#3aa0ff" stroke-opacity=".6"/>
+ <text x="355" y="46" text-anchor="middle" fill="#3aa0ff" font-weight="700">Azure Container Registry</text><text x="355" y="68" text-anchor="middle" fill="#8b97b3">image:tag = commit SHA</text>
+ <rect x="500" y="10" width="450" height="340" rx="18" fill="#0b1328" stroke="#3aa0ff" stroke-opacity=".6"/>
+ <text x="725" y="34" text-anchor="middle" fill="#3aa0ff" font-weight="700">AKS cluster (managed control plane)</text>
+ <rect x="520" y="50" width="200" height="150" rx="12" fill="#101c3a" stroke="#2a3a66"/><text x="620" y="70" text-anchor="middle" fill="#e7ecf7" font-weight="700">System node pool</text>
+ <text x="620" y="88" text-anchor="middle" fill="#8b97b3" font-size="11">CoreDNS, metrics-server, add-ons</text>
+ <rect x="535" y="104" width="80" height="34" rx="7" fill="#16213f" stroke="#2a3a66"/><text x="575" y="126" text-anchor="middle" fill="#cfd8ef" font-size="11">coredns</text>
+ <rect x="625" y="104" width="80" height="34" rx="7" fill="#16213f" stroke="#2a3a66"/><text x="665" y="126" text-anchor="middle" fill="#cfd8ef" font-size="11">metrics</text>
+ <rect x="535" y="146" width="170" height="34" rx="7" fill="#16213f" stroke="#2a3a66"/><text x="620" y="168" text-anchor="middle" fill="#cfd8ef" font-size="11">kube-proxy / CNI</text>
+ <rect x="735" y="50" width="200" height="190" rx="12" fill="#101c3a" stroke="#2de2a6" stroke-opacity=".6"/><text x="835" y="70" text-anchor="middle" fill="#2de2a6" font-weight="700">User node pool</text>
+ <text x="835" y="88" text-anchor="middle" fill="#8b97b3" font-size="11">your apps, autoscaling 1-5</text>
+ <rect x="750" y="104" width="80" height="34" rx="7" fill="#12332b" stroke="#2de2a6" stroke-opacity=".6"/><text x="790" y="126" text-anchor="middle" fill="#bff5e3" font-size="11">hello-api</text>
+ <rect x="840" y="104" width="80" height="34" rx="7" fill="#12332b" stroke="#2de2a6" stroke-opacity=".6"/><text x="880" y="126" text-anchor="middle" fill="#bff5e3" font-size="11">hello-api</text>
+ <rect x="750" y="146" width="80" height="34" rx="7" fill="#12332b" stroke="#2de2a6" stroke-opacity=".6"/><text x="790" y="168" text-anchor="middle" fill="#bff5e3" font-size="11">hello-api</text>
+ <rect x="840" y="146" width="80" height="34" rx="7" fill="#1a2547" stroke="#2a3a66" stroke-dasharray="4 3"/><text x="880" y="168" text-anchor="middle" fill="#8b97b3" font-size="11">HPA adds</text>
+ <rect x="750" y="192" width="170" height="34" rx="7" fill="#16213f" stroke="#2a3a66"/><text x="835" y="214" text-anchor="middle" fill="#cfd8ef" font-size="11">Service + HPA + PDB</text>
+ <rect x="520" y="226" width="200" height="40" rx="10" fill="#1b1442" stroke="#7c5cff" stroke-opacity=".7"/><text x="620" y="251" text-anchor="middle" fill="#cbbfff" font-weight="700">Ingress controller</text>
+ <rect x="520" y="284" width="200" height="40" rx="10" fill="#0f1830" stroke="#f72585" stroke-opacity=".6"/><text x="620" y="309" text-anchor="middle" fill="#ff8bbd" font-weight="700">Azure Load Balancer (public IP)</text>
+ <text x="880" y="296" text-anchor="middle" fill="#8b97b3" font-size="11">Users &rarr; public IP &rarr; ingress &rarr; pods</text>
+ <path d="M110 150 L110 188" stroke="#8b97b3" fill="none" marker-end="url(#ar)"/><text x="118" y="174" fill="#8b97b3" font-size="10">1 token</text>
+ <path d="M192 112 L268 62" stroke="#8b97b3" fill="none" marker-end="url(#ar)"/><text x="206" y="80" fill="#8b97b3" font-size="10">2 push image</text>
+ <path d="M192 124 C 330 150, 420 190, 498 200" stroke="#8b97b3" fill="none" marker-end="url(#ar)"/><text x="300" y="180" fill="#8b97b3" font-size="10">3 kubectl apply</text>
+ <path d="M440 56 C 470 56, 480 90, 520 100" stroke="#8b97b3" fill="none" stroke-dasharray="4 3" marker-end="url(#ar)"/><text x="436" y="108" fill="#8b97b3" font-size="10">4 nodes pull</text>
+ <path d="M620 284 L620 268" stroke="#8b97b3" fill="none" marker-end="url(#ar)"/>
+ <path d="M720 246 C 735 246, 740 200, 750 200" stroke="#8b97b3" fill="none" marker-end="url(#ar)"/>
+</svg>
+<figcaption>Illustration: the flow you will build. GitHub proves its identity to Azure with a short-lived token, pushes an image to ACR, and applies manifests to AKS.</figcaption></figure>
+<div class="kv">
+<div>Cluster</div><div>1 AKS cluster, Free tier, Azure CNI Overlay networking, Microsoft Entra ID + Azure RBAC for access</div>
+<div>Node pools</div><div>1 system pool (add-ons) and 1 user pool (your apps), both with autoscaling</div>
+<div>Registry</div><div>Azure Container Registry, attached to the cluster so nodes can pull images</div>
+<div>App</div><div>A small Node.js API with 2+ pods, Service, Ingress, HPA and PodDisruptionBudget</div>
+<div>Pipeline</div><div>GitHub Actions with OIDC login: build, push, deploy, check health, roll back on failure</div>
+<div>Time</div><div>About 60 to 90 minutes the first time. Cluster creation itself takes 5 to 10 minutes.</div></div>
+<div class="note"><b>Cost warning:</b> the node VMs are what you pay for. The Free tier control plane has no charge. Delete the resource group when you finish practising (see <a href="#day2">Day-2</a>). Check the Azure pricing calculator for your region and VM size. Also, <b>AKS Automatic</b> is a newer mode that picks many of these settings for you. This guide uses standard AKS so you learn each building block.</div>
+
+<h2 id="prereq" class="ph">Prerequisites and tools</h2>
+<div class="step" data-id="p1"><span class="no">2.1</span><h3>Check your Azure account and permissions</h3><span class="tick"></span></div>
+<p class="why">You need to create resources and also assign roles, so the right permissions matter.</p>
+<ul>
+<li>An Azure subscription (a free trial or pay-as-you-go works).</li>
+<li>Role on the subscription: <b>Owner</b>, or <b>Contributor</b> plus <b>User Access Administrator</b>. Plain Contributor cannot create role assignments, and you need them in Part 11.</li>
+<li>Enough vCPU quota in your region for the VM size you pick. A new free account often has a low limit.</li>
+<li>A GitHub account and permission to create a repository.</li></ul>
+<figure class="shot" data-n="aks-01-subscription" data-cap="Azure portal > Subscriptions > your subscription > Access control (IAM) > My access, showing your role. Blur the subscription ID."></figure>
+
+<div class="step" data-id="p2"><span class="no">2.2</span><h3>Install the command-line tools</h3><span class="tick"></span></div>
+<p class="why">Everything below uses these four tools. Cloud Shell in the Azure portal already has them, which is the quickest way to start.</p>
+<pre><code># Windows (PowerShell)
+winget install -e --id Microsoft.AzureCLI
+winget install -e --id Kubernetes.kubectl
+winget install -e --id Helm.Helm
+winget install -e --id Git.Git
+
+# macOS
+brew install azure-cli kubectl helm git
+
+# Ubuntu / Debian
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+sudo snap install kubectl --classic
+sudo snap install helm --classic</code></pre>
+<pre><code># verify (open a NEW terminal first)
+az version
+kubectl version --client
+helm version --short
+git --version</code></pre>
+<div class="note ok"><b>Which shell?</b> Commands below are written for <b>Bash</b> (Azure Cloud Shell, WSL, Git Bash, macOS, Linux). In Windows PowerShell, write variables as <code>$RG="rg-aks-demo"</code> and use the backtick <code>`</code> instead of <code>\</code> at the end of a line.</div>
+
+<div class="step" data-id="p3"><span class="no">2.3</span><h3>Register the Azure resource providers</h3><span class="tick"></span></div>
+<p class="why">A subscription must have each service's provider registered before it can create those resources. New subscriptions sometimes do not.</p>
+<pre><code>az provider register --namespace Microsoft.ContainerService
+az provider register --namespace Microsoft.ContainerRegistry
+az provider register --namespace Microsoft.OperationalInsights
+az provider register --namespace Microsoft.Insights
+az provider register --namespace Microsoft.Network
+az provider register --namespace Microsoft.Compute
+
+# check the state (wait until all say Registered)
+az provider list --query "[?namespace=='Microsoft.ContainerService' || namespace=='Microsoft.ContainerRegistry'].{ns:namespace,state:registrationState}" -o table</code></pre>
+<details><summary>Portal steps</summary><ol>
+<li>Open the Azure portal and search <b>Subscriptions</b>.</li><li>Click your subscription.</li><li>In the left menu under <b>Settings</b>, choose <b>Resource providers</b>.</li>
+<li>Search for <b>Microsoft.ContainerService</b>, select it and press <b>Register</b>. Repeat for the others.</li><li>Wait until the status shows <b>Registered</b>.</li></ol></details>
+<figure class="shot" data-n="aks-02-providers" data-cap="Subscription > Settings > Resource providers, showing Microsoft.ContainerService as Registered."></figure>
+
+<h2 id="vars" class="ph">Variables, sign-in and resource group</h2>
+<div class="step" data-id="v1"><span class="no">3.1</span><h3>Sign in and pick the subscription</h3><span class="tick"></span></div>
+<pre><code>az login
+az account list -o table                       # find the subscription you want
+az account set --subscription "YOUR SUBSCRIPTION NAME OR ID"
+az account show -o table                       # confirm it</code></pre>
+<p>If you use Cloud Shell you are already signed in.</p>
+
+<div class="step" data-id="v2"><span class="no">3.2</span><h3>Choose names and save them as variables</h3><span class="tick"></span></div>
+<p class="why">You will reuse these names in many commands. Setting them once avoids typos. ACR names must be globally unique, lowercase letters and numbers only, 5 to 50 characters.</p>
+<pre><code>LOC=centralindia              # pick a region close to your users
+RG=rg-aks-demo
+ACR=acrdemo12345              # CHANGE: must be unique worldwide
+AKS=aks-demo
+NS=demo                       # Kubernetes namespace for the app
+APP=hello-api
+SUB_ID=$(az account show --query id -o tsv)
+echo "$SUB_ID"</code></pre>
+<div class="note">Variables live only in the current terminal window. If you close it, run this block again.</div>
+
+<div class="step" data-id="v3"><span class="no">3.3</span><h3>Check VM size availability and quota</h3><span class="tick"></span></div>
+<p class="why">The most common failure is a VM size that is not offered in the region, or not enough vCPU quota.</p>
+<pre><code># is the size available in your region?
+az vm list-skus -l $LOC --size Standard_D2s_v5 --query "[].{name:name,restrictions:restrictions[0].reasonCode}" -o table
+
+# how much quota do you have? (look at the DSv5 line: limit vs current usage)
+az vm list-usage -l $LOC --query "[?contains(name.value,'DSv5') || name.value=='cores'].{name:name.localizedValue,used:currentValue,limit:limit}" -o table</code></pre>
+<p>You need roughly 2 vCPU per node. Two system nodes plus two user nodes is 8 vCPU. If quota is too low, request an increase under <b>Subscriptions &rarr; Usage + quotas</b>, or choose a smaller or different VM family.</p>
+
+<div class="step" data-id="v4"><span class="no">3.4</span><h3>Create the resource group</h3><span class="tick"></span></div>
+<p class="why">A resource group is the folder that holds everything. Deleting it later removes the whole lab in one command.</p>
+<pre><code>az group create -n $RG -l $LOC --tags env=dev project=aks-demo
+az group show -n $RG -o table</code></pre>
+<details><summary>Portal steps</summary><ol>
+<li>Search <b>Resource groups</b> in the top bar and open it.</li><li>Click <b>Create</b>.</li><li>Choose your <b>Subscription</b>.</li>
+<li>Type the <b>Resource group</b> name (<code>rg-aks-demo</code>) and pick the <b>Region</b>.</li><li>On the <b>Tags</b> tab add <code>env = dev</code>.</li><li>Click <b>Review + create</b>, then <b>Create</b>.</li></ol></details>
+<figure class="shot" data-n="aks-03-resource-group" data-cap="Create a resource group: Basics tab filled in with name and region."></figure>
+
+<h2 id="acr" class="ph">Container registry (ACR)</h2>
+<div class="step" data-id="a1"><span class="no">4.1</span><h3>Create the registry</h3><span class="tick"></span></div>
+<p class="why">AKS pulls your app images from here. Basic is enough for learning. Use Standard or Premium for production features like geo-replication.</p>
+<pre><code>az acr create -n $ACR -g $RG -l $LOC --sku Basic
+az acr show -n $ACR --query "{name:name,loginServer:loginServer,sku:sku.name}" -o table</code></pre>
+<details><summary>Portal steps</summary><ol>
+<li>Search <b>Container registries</b> and click <b>Create</b>.</li><li>Select the subscription and the resource group <code>rg-aks-demo</code>.</li>
+<li><b>Registry name</b>: your unique name. <b>Location</b>: same region as the cluster.</li><li><b>Pricing plan</b>: Basic.</li><li><b>Review + create</b>, then <b>Create</b>.</li></ol></details>
+<figure class="shot" data-n="aks-04-acr" data-cap="Container registry > Create > Basics, with the Basic pricing plan selected."></figure>
+<div class="note ok">Leave the registry <b>admin user disabled</b>. AKS and GitHub will use Azure identities with roles instead of a shared password.</div>
+
+<h2 id="plan" class="ph">Plan the cluster: nodes and networking</h2>
+<p>Decide these once, so you understand each flag in the next part.</p>
+<table><tr><th>Decision</th><th>Choice in this guide</th><th>Why</th></tr>
+<tr><td>Pricing tier</td><td>Free</td><td>No control plane charge. Use Standard for production (uptime SLA).</td></tr>
+<tr><td>Network plugin</td><td>Azure CNI Overlay</td><td>Pods get private overlay IPs, so you do not use up VNet addresses. Simple and scalable.</td></tr>
+<tr><td>Identity</td><td>Managed identity</td><td>No service principal secrets to rotate.</td></tr>
+<tr><td>Access control</td><td>Microsoft Entra ID + Azure RBAC</td><td>Control who can use the cluster with Azure roles instead of kubeconfig admin files.</td></tr>
+<tr><td>Node pools</td><td>System + User</td><td>System pool runs cluster add-ons. User pool runs your apps. This keeps your workloads from starving cluster services.</td></tr>
+<tr><td>VM size</td><td>Standard_D2s_v5 (2 vCPU, 8 GB)</td><td>Good general-purpose size. For tiny labs a B-series (for example Standard_B2s) is cheaper but not for production.</td></tr>
+<tr><td>Scaling</td><td>Cluster autoscaler on both pools</td><td>Nodes are added and removed with demand.</td></tr>
+<tr><td>Zones</td><td>Spread across zones where the region supports them</td><td>Survives a datacentre outage. Check that your region has zones.</td></tr>
+<tr><td>Workload identity</td><td>Enabled</td><td>Lets pods use Azure identities without secrets, if you need it later.</td></tr></table>
+
+<h2 id="create" class="ph">Create the AKS cluster</h2>
+<div class="step" data-id="c1"><span class="no">6.1</span><h3>Create the cluster with the CLI</h3><span class="tick"></span></div>
+<p class="why">One command creates the control plane and the first (system) node pool, and attaches the registry.</p>
+<pre><code>az aks create \
+  --resource-group $RG \
+  --name $AKS \
+  --location $LOC \
+  --tier free \
+  --nodepool-name system \
+  --node-count 2 \
+  --node-vm-size Standard_D2s_v5 \
+  --enable-cluster-autoscaler --min-count 2 --max-count 3 \
+  --zones 1 2 3 \
+  --network-plugin azure --network-plugin-mode overlay --pod-cidr 192.168.0.0/16 \
+  --enable-managed-identity \
+  --enable-aad --enable-azure-rbac \
+  --enable-oidc-issuer --enable-workload-identity \
+  --attach-acr $ACR \
+  --generate-ssh-keys \
+  --tags env=dev project=aks-demo</code></pre>
+<table><tr><th>Flag</th><th>Meaning</th></tr>
+<tr><td><code>--nodepool-name system</code></td><td>Name of the first pool. Lowercase letters and numbers, up to 12 characters.</td></tr>
+<tr><td><code>--enable-cluster-autoscaler --min-count --max-count</code></td><td>Node count moves between 2 and 3 with demand.</td></tr>
+<tr><td><code>--zones 1 2 3</code></td><td>Spread nodes across availability zones. Remove this flag if your region has no zones.</td></tr>
+<tr><td><code>--network-plugin azure --network-plugin-mode overlay</code></td><td>Azure CNI Overlay. <code>--pod-cidr</code> is the private pod address range and must not overlap your other networks.</td></tr>
+<tr><td><code>--enable-aad --enable-azure-rbac</code></td><td>Microsoft Entra ID sign-in and Azure RBAC for Kubernetes authorisation.</td></tr>
+<tr><td><code>--enable-oidc-issuer --enable-workload-identity</code></td><td>Prepares pod-level Azure identities.</td></tr>
+<tr><td><code>--attach-acr</code></td><td>Grants the cluster permission to pull images from your registry (the AcrPull role).</td></tr></table>
+<p>It takes 5 to 10 minutes. When it finishes it prints a JSON summary.</p>
+<pre><code>az aks show -g $RG -n $AKS --query "{state:provisioningState,version:kubernetesVersion,tier:sku.tier}" -o table</code></pre>
+<div class="note">If it fails with <code>QuotaExceeded</code> or a VM size error, go back to step 3.3. If zones are not supported in your region, remove <code>--zones 1 2 3</code>.</div>
+
+<details open><summary>Portal steps (every tab)</summary><ol>
+<li>Search <b>Kubernetes services</b> and click <b>Create &rarr; Kubernetes cluster</b>.</li>
+<li><b>Basics tab:</b>
+ <ul><li><b>Subscription</b> and <b>Resource group</b>: <code>rg-aks-demo</code>.</li>
+ <li><b>Cluster preset configuration</b>: <i>Dev/Test</i> for a lab, or <i>Production Standard</i> for real use. This sets sensible defaults.</li>
+ <li><b>Kubernetes cluster name</b>: <code>aks-demo</code>. <b>Region</b>: your region.</li>
+ <li><b>Availability zones</b>: select zones 1, 2 and 3 if offered.</li>
+ <li><b>AKS pricing tier</b>: Free (lab) or Standard (production).</li>
+ <li><b>Kubernetes version</b>: keep the default.</li>
+ <li><b>Authentication and Authorization</b>: choose <b>Microsoft Entra ID authentication with Azure RBAC</b>.</li></ul></li>
+<li><b>Node pools tab:</b>
+ <ul><li>Click the default pool <code>agentpool</code> to edit it. Name it <code>system</code>, node size <code>Standard_D2s_v5</code>, scale method <b>Autoscale</b>, min 2, max 3. Save.</li>
+ <li>Click <b>Add node pool</b>. Name <code>userpool</code>, <b>Mode: User</b>, size <code>Standard_D2s_v5</code>, Autoscale min 1, max 5. Add a label <code>workload = apps</code>. Add.</li></ul></li>
+<li><b>Networking tab:</b> <b>Network configuration</b>: <b>Azure CNI Overlay</b>. Leave public access on for this guide. For production consider a private cluster.</li>
+<li><b>Integrations tab:</b> <b>Container registry</b>: pick your ACR. <b>Azure Monitor</b> (Container insights) is optional and adds log cost. Turn it off for a lab.</li>
+<li><b>Advanced tab:</b> note the infrastructure resource group <code>MC_...</code>. Azure puts the node VMs and load balancer there. Do not edit its contents by hand.</li>
+<li><b>Tags tab:</b> <code>env = dev</code>.</li>
+<li><b>Review + create:</b> check the summary, then click <b>Create</b>.</li>
+<li>Wait for <b>Your deployment is complete</b>, then click <b>Go to resource</b>.</li></ol></details>
+<figure class="shot" data-n="aks-05-basics" data-cap="Create Kubernetes cluster > Basics tab with Entra ID + Azure RBAC selected."></figure>
+<figure class="shot" data-n="aks-06-nodepools" data-cap="Node pools tab showing the system pool and the user pool with autoscale ranges."></figure>
+<figure class="shot" data-n="aks-07-networking" data-cap="Networking tab with Azure CNI Overlay selected."></figure>
+<figure class="shot" data-n="aks-08-integrations" data-cap="Integrations tab with the container registry selected."></figure>
+<figure class="shot" data-n="aks-09-review" data-cap="Review + create tab showing Validation passed."></figure>
+<figure class="shot" data-n="aks-10-overview" data-cap="The cluster Overview page after deployment, showing status Succeeded."></figure>
+
+<div class="step" data-id="c2"><span class="no">6.2</span><h3>Confirm the registry is attached</h3><span class="tick"></span></div>
+<pre><code>az aks check-acr -g $RG -n $AKS --acr $ACR.azurecr.io</code></pre>
+<p>You should see a message that the cluster can pull from the registry.</p>
+
+<h2 id="access" class="ph">Give yourself access and connect with kubectl</h2>
+<div class="step" data-id="k1"><span class="no">7.1</span><h3>Assign yourself the cluster admin role</h3><span class="tick"></span></div>
+<p class="why">With Azure RBAC enabled, even the subscription Owner cannot use the cluster until a Kubernetes data role is assigned. Skipping this gives <code>Forbidden</code> errors.</p>
+<pre><code>AKS_ID=$(az aks show -g $RG -n $AKS --query id -o tsv)
+ME=$(az ad signed-in-user show --query id -o tsv)
+
+az role assignment create --assignee $ME \
+  --role "Azure Kubernetes Service RBAC Cluster Admin" --scope $AKS_ID
+
+az role assignment create --assignee $ME \
+  --role "Azure Kubernetes Service Cluster User Role" --scope $AKS_ID</code></pre>
+<details><summary>Portal steps</summary><ol>
+<li>Open your AKS cluster and choose <b>Access control (IAM)</b>.</li><li>Click <b>Add &rarr; Add role assignment</b>.</li>
+<li>Search for <b>Azure Kubernetes Service RBAC Cluster Admin</b>, select it and click <b>Next</b>.</li>
+<li><b>Members</b>: choose <b>User, group, or service principal</b>, click <b>Select members</b>, pick yourself.</li><li><b>Review + assign</b>.</li>
+<li>Repeat for <b>Azure Kubernetes Service Cluster User Role</b>.</li></ol></details>
+<figure class="shot" data-n="aks-11-iam" data-cap="Cluster > Access control (IAM) > Role assignments, showing the two AKS roles assigned to you."></figure>
+<p>Role assignments can take a minute or two to apply.</p>
+
+<div class="step" data-id="k2"><span class="no">7.2</span><h3>Get credentials and convert the login for Entra ID</h3><span class="tick"></span></div>
+<p class="why">Clusters with Entra ID sign-in use the <code>kubelogin</code> helper so kubectl can use your Azure login.</p>
+<pre><code>az aks install-cli                                   # installs kubectl and kubelogin
+az aks get-credentials -g $RG -n $AKS --overwrite-existing
+kubelogin convert-kubeconfig -l azurecli             # use the az login session
+
+kubectl config current-context
+kubectl cluster-info</code></pre>
+<div class="note">If <code>az aks install-cli</code> says permission denied on Linux or macOS, run it with <code>sudo</code>. On Windows, run the terminal as administrator, or make sure kubectl and kubelogin are on your PATH.</div>
+
+<div class="step" data-id="k3"><span class="no">7.3</span><h3>Verify the nodes and system pods</h3><span class="tick"></span></div>
+<pre><code>kubectl get nodes -o wide
+kubectl get pods -A
+kubectl get nodes -L agentpool,topology.kubernetes.io/zone</code></pre>
+<p>You should see two nodes in <b>Ready</b> state, spread across zones, and pods such as <code>coredns</code> and <code>metrics-server</code> in <b>Running</b> state in <code>kube-system</code>.</p>
+<figure class="shot" data-n="aks-12-get-nodes" data-cap="Terminal output of kubectl get nodes -o wide with nodes Ready."></figure>
+
+<h2 id="nodes" class="ph">Node pools: system and user</h2>
+<div class="step" data-id="n1"><span class="no">8.1</span><h3>Add a user node pool for your apps</h3><span class="tick"></span></div>
+<p class="why">Keep your apps off the system pool, so a noisy app cannot break DNS or metrics for the whole cluster.</p>
+<pre><code>az aks nodepool add \
+  --resource-group $RG --cluster-name $AKS \
+  --name userpool --mode User \
+  --node-count 2 --node-vm-size Standard_D2s_v5 \
+  --enable-cluster-autoscaler --min-count 1 --max-count 5 \
+  --zones 1 2 3 \
+  --labels workload=apps</code></pre>
+<details><summary>Portal steps</summary><ol>
+<li>Open the cluster and choose <b>Settings &rarr; Node pools</b>.</li><li>Click <b>Add node pool</b>.</li>
+<li><b>Node pool name</b>: <code>userpool</code>. <b>Mode</b>: <b>User</b>.</li><li><b>OS SKU</b>: Ubuntu Linux (or Azure Linux). <b>Node size</b>: <code>Standard_D2s_v5</code>.</li>
+<li><b>Scale method</b>: Autoscale, min 1, max 5. <b>Availability zones</b>: 1, 2, 3.</li>
+<li>Under <b>Labels</b> add <code>workload</code> = <code>apps</code>.</li><li>Click <b>Add</b>.</li></ol></details>
+<figure class="shot" data-n="aks-13-add-nodepool" data-cap="Node pools > Add node pool form, mode User with autoscale and label."></figure>
+
+<div class="step" data-id="n2"><span class="no">8.2</span><h3>Reserve the system pool for system pods (taint)</h3><span class="tick"></span></div>
+<p class="why">A taint keeps normal pods away from a node. Only pods that tolerate it, such as cluster add-ons, run there.</p>
+<pre><code>az aks nodepool update -g $RG --cluster-name $AKS -n system \
+  --node-taints CriticalAddonsOnly=true:NoSchedule
+
+kubectl get nodes -L agentpool
+kubectl describe node $(kubectl get nodes -l agentpool=system -o name | head -1) | grep -A2 Taints</code></pre>
+<div class="note">Only do this after the user pool exists and is Ready, or your own pods will have nowhere to run. Cluster add-ons already tolerate this taint.</div>
+
+<div class="step" data-id="n3"><span class="no">8.3</span><h3>Check both pools</h3><span class="tick"></span></div>
+<pre><code>az aks nodepool list -g $RG --cluster-name $AKS \
+  --query "[].{name:name,mode:mode,count:count,vm:vmSize,min:minCount,max:maxCount}" -o table
+kubectl get nodes -L agentpool,workload</code></pre>
+<figure class="shot" data-n="aks-14-nodepools-list" data-cap="Cluster > Node pools blade listing system and userpool, both Ready."></figure>
+<details><summary>Optional: a cheap Spot pool for batch or test work</summary>
+<pre><code>az aks nodepool add -g $RG --cluster-name $AKS -n spot1 --mode User \
+  --priority Spot --eviction-policy Delete --spot-max-price -1 \
+  --enable-cluster-autoscaler --min-count 0 --max-count 3 \
+  --node-vm-size Standard_D2s_v5 --labels workload=batch \
+  --node-taints kubernetes.azure.com/scalesetpriority=spot:NoSchedule</code></pre>
+<p>Spot nodes can be taken back by Azure at any time. Use them only for work that can be retried.</p></details>
+
+<h2 id="ingress" class="ph">Ingress controller and namespace</h2>
+<div class="step" data-id="i1"><span class="no">9.1</span><h3>Create the application namespace</h3><span class="tick"></span></div>
+<p class="why">A namespace groups your app. You will also scope the GitHub pipeline's permissions to just this namespace.</p>
+<pre><code>kubectl create namespace $NS
+kubectl label namespace $NS env=dev
+kubectl get ns</code></pre>
+
+<div class="step" data-id="i2"><span class="no">9.2</span><h3>Install the NGINX ingress controller with Helm</h3><span class="tick"></span></div>
+<p class="why">The ingress controller is the single public entry point. It creates one Azure load balancer and routes web traffic to your services.</p>
+<pre><code>helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace \
+  --set controller.replicaCount=2 \
+  --set controller.nodeSelector."kubernetes\.io/os"=linux \
+  --set controller.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path"=/healthz</code></pre>
+<div class="note">After the system pool is tainted (step 8.2), the controller pods run on the user pool. If they stay <code>Pending</code>, check that the user pool has Ready nodes (<code>kubectl get nodes -L agentpool</code>).</div>
+
+<div class="step" data-id="i3"><span class="no">9.3</span><h3>Wait for the public IP</h3><span class="tick"></span></div>
+<pre><code>kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx ingress-nginx-controller -w     # wait until EXTERNAL-IP is not pending
+INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo $INGRESS_IP</code></pre>
+<figure class="shot" data-n="aks-15-ingress-ip" data-cap="Terminal showing ingress-nginx-controller with an EXTERNAL-IP."></figure>
+
+<h2 id="pods" class="ph">Pod setup: deploy the app</h2>
+<div class="step" data-id="d1"><span class="no">10.1</span><h3>Smoke test the cluster with a ready-made image</h3><span class="tick"></span></div>
+<p class="why">Prove the cluster, ingress and networking work before you add the pipeline, so later problems point to the pipeline and not the cluster.</p>
+<pre><code>kubectl create deployment smoke --image=mcr.microsoft.com/azuredocs/aks-helloworld:v1 -n $NS
+kubectl expose deployment smoke --port=80 -n $NS
+kubectl create ingress smoke --class=nginx --rule="/=smoke:80" -n $NS
+kubectl get pods -n $NS
+curl -i http://$INGRESS_IP/</code></pre>
+<p>You should get an HTTP 200 page. Then clean it up:</p>
+<pre><code>kubectl delete ingress,svc,deployment smoke -n $NS</code></pre>
+
+<div class="step" data-id="d2"><span class="no">10.2</span><h3>Create the app and the Dockerfile</h3><span class="tick"></span></div>
+<p>Create a repo folder like this (you will push it to GitHub in Part 11):</p>
+<pre><code>aks-demo/
+  app/
+    server.js
+    package.json
+    Dockerfile
+  k8s/
+    deployment.yaml
+    service.yaml
+    ingress.yaml
+    hpa.yaml
+    pdb.yaml
+  .github/workflows/deploy-aks.yml</code></pre>
+<pre data-file="app/server.js"><code>const http = require("http");
+const port = process.env.PORT || 3000;
+
+const server = http.createServer((req, res) =&gt; {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ status: "ok" }));
+  }
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end(`Hello from AKS, pod ${process.env.HOSTNAME}\n`);
+});
+
+server.listen(port, () =&gt; console.log(`Listening on ${port}`));
+process.on("SIGTERM", () =&gt; server.close(() =&gt; process.exit(0)));</code></pre>
+<pre data-file="app/package.json"><code>{
+  "name": "hello-api",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" }
+}</code></pre>
+<pre data-file="app/Dockerfile"><code>FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --omit=dev
+COPY . .
+EXPOSE 3000
+USER node
+CMD ["node", "server.js"]</code></pre>
+<p>More on Dockerfiles is on the <a href="docker.html">Docker page</a>.</p>
+
+<div class="step" data-id="d3"><span class="no">10.3</span><h3>Write the Kubernetes manifests (pod setup)</h3><span class="tick"></span></div>
+<p class="why">These files describe how pods run: how many, how much CPU and memory, how health is checked, and where they are placed.</p>
+<pre data-file="k8s/deployment.yaml"><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-api
+  labels: { app: hello-api }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: hello-api }
+  template:
+    metadata:
+      labels: { app: hello-api }
+    spec:
+      nodeSelector:
+        workload: apps                    # run on the user pool
+      topologySpreadConstraints:          # spread pods across nodes
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: hello-api }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: hello-api
+          image: IMAGE_PLACEHOLDER        # the pipeline replaces this
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 3000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true</code></pre>
+<pre data-file="k8s/service.yaml"><code>apiVersion: v1
+kind: Service
+metadata:
+  name: hello-api
+spec:
+  type: ClusterIP
+  selector: { app: hello-api }
+  ports:
+    - port: 80
+      targetPort: 3000</code></pre>
+<pre data-file="k8s/ingress.yaml"><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello-api
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hello-api
+                port: { number: 80 }</code></pre>
+<pre data-file="k8s/hpa.yaml"><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hello-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hello-api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }</code></pre>
+<pre data-file="k8s/pdb.yaml"><code>apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hello-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: hello-api }</code></pre>
+<table><tr><th>Setting</th><th>What it does</th></tr>
+<tr><td><code>nodeSelector workload: apps</code></td><td>Places pods on the user pool you labelled in step 8.1.</td></tr>
+<tr><td><code>requests / limits</code></td><td>Requests reserve capacity for scheduling. Limits cap use. The HPA measures CPU against the request.</td></tr>
+<tr><td><code>readinessProbe</code></td><td>Traffic is only sent to a pod once this passes.</td></tr>
+<tr><td><code>livenessProbe</code></td><td>Restarts a pod that stops responding.</td></tr>
+<tr><td><code>maxUnavailable: 0</code></td><td>Rolling updates never drop below the desired count, so no downtime.</td></tr>
+<tr><td><code>PodDisruptionBudget</code></td><td>Node upgrades and drains keep at least one pod running.</td></tr>
+<tr><td><code>runAsNonRoot, readOnlyRootFilesystem</code></td><td>Basic container hardening.</td></tr></table>
+
+<div class="step" data-id="d4"><span class="no">10.4</span><h3>Test the deployment by hand once (optional but recommended)</h3><span class="tick"></span></div>
+<p class="why">If you can deploy by hand, then any pipeline failure later is about identity or the workflow, not your manifests.</p>
+<pre><code>az acr build --registry $ACR --image $APP:manual ./app
+sed "s|IMAGE_PLACEHOLDER|$ACR.azurecr.io/$APP:manual|" k8s/deployment.yaml | kubectl apply -n $NS -f -
+kubectl apply -n $NS -f k8s/service.yaml -f k8s/ingress.yaml -f k8s/hpa.yaml -f k8s/pdb.yaml
+kubectl rollout status deployment/hello-api -n $NS
+kubectl get pods -n $NS -o wide
+curl http://$INGRESS_IP/</code></pre>
+<figure class="shot" data-n="aks-16-pods-running" data-cap="kubectl get pods -n demo -o wide showing 2 pods Running on the user pool nodes."></figure>
+<figure class="shot" data-n="aks-17-app-browser" data-cap="Browser showing the app response at the ingress IP (Hello from AKS, pod ...)."></figure>
+<figure class="shot" data-n="aks-18-acr-repos" data-cap="Container registry > Repositories, showing hello-api with a tag."></figure>
+
+<h2 id="gha" class="ph">Connect GitHub Actions</h2>
+<p>The pipeline signs in to Azure with <b>OIDC</b>: GitHub gives each run a short-lived token and Azure trusts it. There is no client secret to store or rotate.</p>
+<div class="step" data-id="g1"><span class="no">11.1</span><h3>Create the GitHub repository and push the code</h3><span class="tick"></span></div>
+<pre><code>cd aks-demo
+git init -b main
+git add .
+git commit -m "AKS demo app"
+# create an empty repo on github.com first (for example YOUR_USER/aks-demo), then:
+git remote add origin https://github.com/YOUR_USER/aks-demo.git
+git push -u origin main</code></pre>
+<p>Use a <b>private</b> repo if the code is not meant to be public.</p>
+
+<div class="step" data-id="g2"><span class="no">11.2</span><h3>Create an identity for GitHub in Microsoft Entra ID</h3><span class="tick"></span></div>
+<p class="why">This is the "app registration" that represents your pipeline in Azure.</p>
+<pre><code>GH_REPO=YOUR_USER/aks-demo
+APP_NAME=gh-aks-demo
+
+az ad app create --display-name $APP_NAME
+APP_ID=$(az ad app list --display-name $APP_NAME --query "[0].appId" -o tsv)
+APP_OBJ=$(az ad app list --display-name $APP_NAME --query "[0].id" -o tsv)
+az ad sp create --id $APP_ID
+TENANT_ID=$(az account show --query tenantId -o tsv)
+echo "client id: $APP_ID   tenant: $TENANT_ID"</code></pre>
+<details><summary>Portal steps</summary><ol>
+<li>Search <b>Microsoft Entra ID</b> &rarr; <b>App registrations</b> &rarr; <b>New registration</b>.</li>
+<li>Name it <code>gh-aks-demo</code>, leave the defaults and click <b>Register</b>.</li>
+<li>Copy the <b>Application (client) ID</b> and <b>Directory (tenant) ID</b> from the Overview page.</li></ol></details>
+<figure class="shot" data-n="aks-19-app-registration" data-cap="Entra ID > App registrations > gh-aks-demo > Overview (blur the IDs before sharing)."></figure>
+
+<div class="step" data-id="g3"><span class="no">11.3</span><h3>Trust your GitHub repo (federated credential)</h3><span class="tick"></span></div>
+<p class="why">This tells Azure: accept tokens from this exact repository and environment, and nobody else. The <b>subject</b> must match exactly or login fails.</p>
+<pre><code># for the production environment used in the workflow
+az ad app federated-credential create --id $APP_OBJ --parameters '{
+  "name": "gh-env-production",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:'$GH_REPO':environment:production",
+  "audiences": ["api://AzureADTokenExchange"]
+}'
+
+# for the build job, which runs without an environment on the main branch
+az ad app federated-credential create --id $APP_OBJ --parameters '{
+  "name": "gh-branch-main",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:'$GH_REPO':ref:refs/heads/main",
+  "audiences": ["api://AzureADTokenExchange"]
+}'</code></pre>
+<details><summary>Portal steps</summary><ol>
+<li>Open the app registration, then <b>Certificates &amp; secrets</b> &rarr; <b>Federated credentials</b> &rarr; <b>Add credential</b>.</li>
+<li><b>Scenario</b>: GitHub Actions deploying Azure resources.</li>
+<li><b>Organization</b>: your GitHub user. <b>Repository</b>: <code>aks-demo</code>.</li>
+<li><b>Entity type</b>: <b>Environment</b>, name <code>production</code>. Add a second credential for <b>Branch</b> = <code>main</code>.</li>
+<li>Give each a name and click <b>Add</b>.</li></ol></details>
+<figure class="shot" data-n="aks-20-federated-credential" data-cap="App registration > Federated credentials, listing the production environment and main branch credentials."></figure>
+
+<div class="step" data-id="g4"><span class="no">11.4</span><h3>Give the identity the least permissions it needs</h3><span class="tick"></span></div>
+<p class="why">Scope each role as narrowly as possible: push to one registry, use one cluster, write to one namespace.</p>
+<pre><code>ACR_ID=$(az acr show -n $ACR --query id -o tsv)
+SP_OBJ=$(az ad sp show --id $APP_ID --query id -o tsv)      # object id of the new identity
+# (using the object id avoids "principal not found" delays right after creation)
+SP="--assignee-object-id $SP_OBJ --assignee-principal-type ServicePrincipal"
+
+# 1. push images to the registry
+az role assignment create $SP --role AcrPush --scope $ACR_ID
+
+# 2. fetch cluster credentials
+az role assignment create $SP --role "Azure Kubernetes Service Cluster User Role" --scope $AKS_ID
+
+# 3. deploy only inside the demo namespace
+az role assignment create $SP --role "Azure Kubernetes Service RBAC Writer" --scope "$AKS_ID/namespaces/$NS"
+
+# 4. read the ingress service (to find the public IP for the smoke test)
+az role assignment create $SP --role "Azure Kubernetes Service RBAC Reader" --scope "$AKS_ID/namespaces/ingress-nginx"</code></pre>
+<div class="note">The pipeline builds with Docker and pushes, which needs only <b>AcrPush</b>. The <code>az acr build</code> command used in step 10.4 runs a cloud build task, which needs more rights (for example Contributor on the registry), so it is not used in the pipeline. If a manifest is rejected as <code>Forbidden</code>, check what it creates, or temporarily use <b>RBAC Cluster Admin</b> to confirm it is a permissions issue.</div>
+<figure class="shot" data-n="aks-21-role-assignments" data-cap="ACR and AKS > Access control (IAM), showing gh-aks-demo with AcrPush and the AKS roles."></figure>
+
+<div class="step" data-id="g5"><span class="no">11.5</span><h3>Add the repository variables to GitHub</h3><span class="tick"></span></div>
+<p class="why">The client, tenant and subscription IDs are identifiers, not passwords, so repository <b>variables</b> are fine.</p>
+<pre><code>gh auth login                                   # once, if you have not used the GitHub CLI
+gh variable set AZURE_CLIENT_ID       --body "$APP_ID"   --repo $GH_REPO
+gh variable set AZURE_TENANT_ID       --body "$TENANT_ID" --repo $GH_REPO
+gh variable set AZURE_SUBSCRIPTION_ID --body "$SUB_ID"   --repo $GH_REPO</code></pre>
+<details><summary>GitHub web steps</summary><ol>
+<li>Open your repo on github.com &rarr; <b>Settings</b>.</li><li>Left menu: <b>Secrets and variables &rarr; Actions</b>.</li><li>Open the <b>Variables</b> tab and click <b>New repository variable</b>.</li>
+<li>Add <code>AZURE_CLIENT_ID</code>, <code>AZURE_TENANT_ID</code> and <code>AZURE_SUBSCRIPTION_ID</code> with the values from the earlier steps.</li></ol></details>
+<figure class="shot" data-n="aks-22-github-variables" data-cap="GitHub > Settings > Secrets and variables > Actions > Variables, with the three variables (values hidden)."></figure>
+
+<div class="step" data-id="g6"><span class="no">11.6</span><h3>Create the production environment with an approval gate</h3><span class="tick"></span></div>
+<ol>
+<li>Repo &rarr; <b>Settings</b> &rarr; <b>Environments</b> &rarr; <b>New environment</b>.</li>
+<li>Name it exactly <code>production</code> (it must match the federated credential).</li>
+<li>Tick <b>Required reviewers</b> and add yourself or your team. Save protection rules.</li>
+<li>Optional: restrict <b>Deployment branches</b> to <code>main</code>.</li></ol>
+<figure class="shot" data-n="aks-23-environment" data-cap="Settings > Environments > production with Required reviewers enabled."></figure>
+<div class="note">Environment protection rules on private repos need a paid GitHub plan. On a free private repo, skip the reviewers and the pipeline still works. The environment name must still match the federated credential subject.</div>
+
+<div class="step" data-id="g7"><span class="no">11.7</span><h3>Add the workflow file</h3><span class="tick"></span></div>
+<p class="why">This is the pipeline: build the image and push it to ACR, then deploy to AKS, check health, and roll back if the check fails.</p>
+<pre data-file=".github/workflows/deploy-aks.yml"><code>name: deploy-aks
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", "k8s/**", ".github/workflows/deploy-aks.yml"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write      # needed for OIDC login to Azure
+  contents: read
+
+concurrency:
+  group: deploy-aks
+  cancel-in-progress: false
+
+env:
+  ACR_NAME: acrdemo12345     # CHANGE to your registry name
+  AKS_NAME: aks-demo
+  RESOURCE_GROUP: rg-aks-demo
+  NAMESPACE: demo
+  APP: hello-api
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Compute image name
+        id: meta
+        run: echo "image=${ACR_NAME}.azurecr.io/${APP}:${GITHUB_SHA::7}" &gt;&gt; "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        run: |
+          az acr login --name "$ACR_NAME"
+          docker build -t "${{ steps.meta.outputs.image }}" ./app
+          docker push "${{ steps.meta.outputs.image }}"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Connect to AKS
+        run: |
+          sudo az aks install-cli
+          az aks get-credentials -g "$RESOURCE_GROUP" -n "$AKS_NAME" --overwrite-existing
+          kubelogin convert-kubeconfig -l azurecli
+          kubectl get pods -n "$NAMESPACE"
+
+      - name: Deploy manifests
+        run: |
+          sed -i "s|IMAGE_PLACEHOLDER|${{ needs.build.outputs.image }}|" k8s/deployment.yaml
+          kubectl apply -n "$NAMESPACE" -f k8s/
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/"$APP" -n "$NAMESPACE" --timeout=180s
+
+      - name: Smoke test through the ingress
+        run: |
+          IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "ingress ip: $IP"
+          curl -fsS --retry 6 --retry-delay 5 "http://$IP/health"
+
+      - name: Roll back if anything failed
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/"$APP" -n "$NAMESPACE" || true
+          kubectl rollout status deployment/"$APP" -n "$NAMESPACE" --timeout=120s || true</code></pre>
+<div class="note ok"><b>How the identity flows:</b> <code>permissions: id-token: write</code> lets the job request a GitHub token. <code>azure/login</code> exchanges it for an Azure token using your federated credential. The <code>deploy</code> job uses <code>environment: production</code>, so Azure sees the subject <code>repo:...:environment:production</code>.</div>
+<div class="note">The smoke test reads the ingress service in the <code>ingress-nginx</code> namespace. That is why step 11.4 gives the pipeline a read-only role on that namespace. Also note that cluster-wide commands such as <code>kubectl get ns</code> are not allowed for a namespace-scoped role, so the workflow only uses namespaced commands.</div>
+
+<div class="step" data-id="g8"><span class="no">11.8</span><h3>Commit and push the workflow</h3><span class="tick"></span></div>
+<pre><code>git add .github/workflows/deploy-aks.yml
+git commit -m "Add AKS deploy pipeline"
+git push</code></pre>
+
+<h2 id="run" class="ph">Run the pipeline and verify</h2>
+<div class="step" data-id="r1"><span class="no">12.1</span><h3>Watch the workflow run</h3><span class="tick"></span></div>
+<ol>
+<li>Open the repo on github.com &rarr; <b>Actions</b> tab.</li>
+<li>Click the latest <b>deploy-aks</b> run.</li>
+<li>Open the <b>build</b> job and check each step turns green. Expand <b>Build and push image</b> to see the docker build and push log.</li>
+<li>If you set required reviewers, the <b>deploy</b> job waits. Click <b>Review deployments</b>, tick <b>production</b>, and press <b>Approve and deploy</b>.</li>
+<li>Open the <b>deploy</b> job and confirm <b>Wait for rollout</b> and <b>Smoke test</b> pass.</li></ol>
+<pre><code>gh run list --repo $GH_REPO --limit 5
+gh run watch --repo $GH_REPO                  # live view of the latest run</code></pre>
+<figure class="shot" data-n="aks-24-actions-run" data-cap="Actions > deploy-aks run with the build and deploy jobs both green."></figure>
+<figure class="shot" data-n="aks-25-approval" data-cap="The Review deployments dialog asking to approve the production environment."></figure>
+
+<div class="step" data-id="r2"><span class="no">12.2</span><h3>Verify on the cluster</h3><span class="tick"></span></div>
+<pre><code>kubectl get deploy,pods,svc,ingress,hpa,pdb -n $NS
+kubectl get pods -n $NS -o wide
+kubectl describe deployment hello-api -n $NS | grep Image
+curl http://$INGRESS_IP/
+curl http://$INGRESS_IP/health</code></pre>
+<p>Confirm the image tag matches the first 7 characters of the commit that triggered the run. That proves the pipeline, not your laptop, deployed it.</p>
+
+<div class="step" data-id="r3"><span class="no">12.3</span><h3>Make a change and watch it roll out</h3><span class="tick"></span></div>
+<pre><code># edit app/server.js (for example change the greeting), then:
+git add -A && git commit -m "Change greeting" && git push
+kubectl rollout status deployment/hello-api -n $NS -w
+curl http://$INGRESS_IP/</code></pre>
+<p>Pods are replaced one at a time. With <code>maxUnavailable: 0</code> and a readiness probe, users see no downtime.</p>
+
+<div class="step" data-id="r4"><span class="no">12.4</span><h3>Try a rollback and load-based scaling</h3><span class="tick"></span></div>
+<pre><code>kubectl rollout history deployment/hello-api -n $NS
+kubectl rollout undo deployment/hello-api -n $NS
+
+# watch the autoscaler (generate load from a temporary pod)
+kubectl get hpa -n $NS -w
+kubectl run load --rm -it --image=busybox:1.36 -n $NS -- sh -c "while true; do wget -q -O- http://hello-api/ &gt; /dev/null; done"</code></pre>
+<p>Stop the load with Ctrl+C. The HPA scales the pods back down after the stabilisation window. See the <a href="autoscaling.html">HPA vs VPA page</a> for how this works.</p>
+
+<h2 id="day2" class="ph">Day-2: upgrades, cost, cleanup</h2>
+<h3>Upgrades</h3>
+<pre><code>az aks get-upgrades -g $RG -n $AKS -o table
+az aks upgrade -g $RG -n $AKS --kubernetes-version NEW_VERSION        # control plane + nodes
+az aks nodepool upgrade -g $RG --cluster-name $AKS -n userpool --node-image-only   # OS image only</code></pre>
+<p>Upgrade a test cluster first. PodDisruptionBudgets keep your app available while nodes are drained one by one. You can also set an automatic upgrade channel: <code>az aks update -g $RG -n $AKS --auto-upgrade-channel patch</code>.</p>
+<h3>Save cost on non-production</h3>
+<pre><code>az aks stop  -g $RG -n $AKS      # stops the nodes and the compute charge
+az aks start -g $RG -n $AKS
+az aks nodepool scale -g $RG --cluster-name $AKS -n userpool --node-count 1   # only works with autoscaler off</code></pre>
+<ul><li>Set resource <b>requests</b> from real usage. Over-requesting is the biggest source of waste.</li><li>Use the cluster autoscaler min counts as low as is safe, and Spot pools for retryable work.</li><li>Tag everything and use Cost Management budgets. See the <a href="cloud-services.html">service picker</a> FinOps tips.</li></ul>
+<h3>Monitoring</h3>
+<pre><code>az aks enable-addons -g $RG -n $AKS --addons monitoring     # Container insights (adds Log Analytics cost)
+kubectl top nodes
+kubectl top pods -n $NS</code></pre>
+<h3>Delete everything when you are done</h3>
+<pre><code>az group delete -n $RG --yes --no-wait                       # cluster, registry, node resource group
+az ad app delete --id $APP_ID                                 # the GitHub identity</code></pre>
+<div class="note"><b>Check afterwards:</b> in the portal, open <b>Resource groups</b> and confirm both <code>rg-aks-demo</code> and the <code>MC_...</code> group are gone. Leftover node VMs and public IPs keep billing.</div>
+
+<h2 id="trouble" class="ph">Troubleshooting</h2>
+<table><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+<tr><td><code>Forbidden</code> from kubectl</td><td>No Azure RBAC data role on the cluster</td><td>Step 7.1: assign Azure Kubernetes Service RBAC Cluster Admin, wait a minute, retry.</td></tr>
+<tr><td><code>kubelogin</code> or "getting credentials" errors</td><td>kubeconfig not converted</td><td><code>kubelogin convert-kubeconfig -l azurecli</code> and make sure <code>az login</code> is current.</td></tr>
+<tr><td><code>QuotaExceeded</code> or VM size not available</td><td>Region quota or SKU</td><td>Step 3.3. Request quota or pick another size or region.</td></tr>
+<tr><td>Pods <code>Pending</code></td><td>Taint, nodeSelector or no capacity</td><td><code>kubectl describe pod</code>. Check the user pool exists and has label <code>workload=apps</code>, and autoscaler max is not reached.</td></tr>
+<tr><td><code>ImagePullBackOff</code></td><td>Registry not attached, or wrong tag</td><td><code>az aks check-acr</code>, <code>az aks update --attach-acr</code>, and check the tag exists in ACR.</td></tr>
+<tr><td><code>AADSTS700213</code> or "No matching federated identity record"</td><td>Subject mismatch in the federated credential</td><td>The subject must exactly match <code>repo:OWNER/REPO:environment:production</code> or <code>:ref:refs/heads/main</code>. Case-sensitive.</td></tr>
+<tr><td><code>azure/login</code> says no subscription found</td><td>Identity has no role</td><td>Step 11.4. The service principal needs at least one role assignment in the subscription.</td></tr>
+<tr><td><code>az acr build</code> authorisation error</td><td>Missing registry permission</td><td>Add Contributor on the registry scope (see note under 11.4).</td></tr>
+<tr><td>Ingress <code>EXTERNAL-IP</code> stays pending</td><td>Load balancer still provisioning, or public IP quota</td><td>Wait a few minutes, then <code>kubectl describe svc -n ingress-nginx ingress-nginx-controller</code>.</td></tr>
+<tr><td>Ingress returns 404 or 503</td><td>No matching ingress rule, or no ready pods</td><td><code>kubectl get ingress,endpoints -n demo</code>. Endpoints must list pod IPs.</td></tr>
+<tr><td>Rollout stuck</td><td>Failing readiness probe</td><td><code>kubectl describe pod</code>, <code>kubectl logs POD</code>, then see the <a href="kubernetes.html#debug">Kubernetes troubleshooting</a> section.</td></tr></table>
+
+<h2 id="shots" class="ph">Screenshot checklist</h2>
+<p>Capture each screen, remove or blur anything private (subscription ID, tenant ID, emails, public IPs), and save it as a PNG in <code>guides/assets/aks/</code> with the exact name below. Refresh the page and it replaces the placeholder. If you send me the images in chat, I can add them to the site for you.</p>
+<table id="shotlist"><tr><th>File name</th><th>What to capture</th><th>Status</th></tr></table>
+
+<div class="pager"><a href="shell-scripts.html">&larr; Shell scripts</a><a href="../index.html#guides">All guides &rarr;</a></div>
+</main><footer>&copy; 2026 Himansu Kumar Behera</footer>
+<div id="lb"><img alt=""></div>
+
+<script src="guide.js"></script>
+<script>
+(function(){
+/* ---- screenshot slots ---- */
+const lb=document.getElementById('lb'),lbi=lb.querySelector('img');
+lb.addEventListener('click',()=>lb.style.display='none');
+const rows=[];
+document.querySelectorAll('figure.shot').forEach(f=>{
+  const n=f.dataset.n,cap=f.dataset.cap,src='assets/aks/'+n+'.png';
+  const row={n:n,cap:cap,ok:false};rows.push(row);
+  const img=new Image();img.alt=cap;
+  img.onload=()=>{row.ok=true;f.innerHTML='';f.appendChild(img);const c=document.createElement('figcaption');c.textContent=cap;f.appendChild(c);img.addEventListener('click',()=>{lbi.src=img.src;lb.style.display='flex'});fill()};
+  img.onerror=()=>{f.innerHTML='<div class="ph-box"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg><div><b>Screenshot: '+cap.replace(/</g,'&lt;')+'</b><span>Save as <code>guides/assets/aks/'+n+'.png</code></span></div></div>'};
+  img.src=src;
+});
+function fill(){
+  const t=document.getElementById('shotlist');if(!t)return;
+  t.innerHTML='<tr><th>File name</th><th>What to capture</th><th>Status</th></tr>'+rows.map(r=>'<tr><td><code>'+r.n+'.png</code></td><td>'+r.cap.replace(/</g,'&lt;')+'</td><td>'+(r.ok?'added':'missing')+'</td></tr>').join('');
+}
+fill();
+setTimeout(fill,1500);
+
+/* ---- step checklist with progress (saved in this browser only) ---- */
+const KEY='aksGuideSteps';let done={};
+try{done=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+const steps=[...document.querySelectorAll('.step')];
+function upd(){
+  const d=steps.filter(s=>s.classList.contains('done')).length;
+  document.getElementById('pt').textContent=d+' of '+steps.length+' steps done';
+  document.getElementById('pb').style.width=(steps.length?d/steps.length*100:0)+'%';
+}
+steps.forEach(s=>{
+  if(done[s.dataset.id])s.classList.add('done');
+  s.addEventListener('click',()=>{
+    s.classList.toggle('done');done[s.dataset.id]=s.classList.contains('done');
+    try{localStorage.setItem(KEY,JSON.stringify(done))}catch(e){}
+    upd();
+  });
+});
+document.getElementById('reset').addEventListener('click',()=>{
+  steps.forEach(s=>s.classList.remove('done'));done={};
+  try{localStorage.removeItem(KEY)}catch(e){}upd();
+});
+upd();
+})();
+</script>
+</body></html>
